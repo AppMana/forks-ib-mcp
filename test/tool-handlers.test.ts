@@ -34,6 +34,8 @@ describe('ToolHandlers', () => {
       getAccountInfo: vi.fn().mockResolvedValue({ accounts: [] }),
       getPositions: vi.fn().mockResolvedValue([]),
       getMarketData: vi.fn().mockResolvedValue({ price: 150 }),
+      getContractDetails: vi.fn().mockResolvedValue({ secdef: [] }),
+      getContractRules: vi.fn().mockResolvedValue({ canTradeAcctIds: [] }),
       order: vi.fn().mockResolvedValue({ orderId: '123' }),
       placeOrder: vi.fn().mockResolvedValue({ orderId: '123' }),
       getOrderStatus: vi.fn().mockResolvedValue({ status: 'Filled' }),
@@ -135,6 +137,20 @@ describe('ToolHandlers', () => {
       await handlers.getMarketData({ symbol: 'AAPL', exchange: 'NASDAQ' });
 
       expect(mockIBClient.getMarketData).toHaveBeenCalledWith('AAPL', 'NASDAQ');
+    });
+  });
+
+  describe('contract metadata', () => {
+    it('should fetch details for exact conids', async () => {
+      await handlers.getContractDetails({ conids: [4815747, 265598] });
+
+      expect(mockIBClient.getContractDetails).toHaveBeenCalledWith([4815747, 265598]);
+    });
+
+    it('should fetch sell rules for the requested contract and exchange', async () => {
+      await handlers.getContractRules({ conid: 4815747, side: 'SELL', exchange: 'FUNDSERV' });
+
+      expect(mockIBClient.getContractRules).toHaveBeenCalledWith(4815747, 'SELL', 'FUNDSERV');
     });
   });
 

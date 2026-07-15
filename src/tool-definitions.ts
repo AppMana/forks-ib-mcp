@@ -8,6 +8,10 @@ const IntegerOrStringIntegerZod = z.union([
 
 const SecurityTypeZod = z.enum(IBKR_ORDER_SECURITY_TYPES);
 const OptionRightZod = z.enum(["C", "P"]);
+const ConidZod = z.union([
+  z.number().int().positive(),
+  z.string().regex(/^[0-9]+$/).transform((val) => Number(val)),
+]);
 
 export const AuthenticateZodShape = {
   confirm: z.literal(true)
@@ -37,6 +41,16 @@ export const ResolveOptionConidZodShape = {
 export const GetMarketDataZodShape = {
   symbol: z.string(),
   exchange: z.string().optional()
+};
+
+export const GetContractDetailsZodShape = {
+  conids: z.array(ConidZod).min(1).max(100),
+};
+
+export const GetContractRulesZodShape = {
+  conid: ConidZod,
+  side: z.enum(["BUY", "SELL"]),
+  exchange: z.string().optional(),
 };
 
 export const PlaceOrderZodShape = {
@@ -139,6 +153,8 @@ export const GetPositionsZodSchema = z.object(GetPositionsZodShape);
 export const GetOptionChainZodSchema = z.object(GetOptionChainZodShape);
 export const ResolveOptionConidZodSchema = z.object(ResolveOptionConidZodShape);
 export const GetMarketDataZodSchema = z.object(GetMarketDataZodShape);
+export const GetContractDetailsZodSchema = z.object(GetContractDetailsZodShape);
+export const GetContractRulesZodSchema = z.object(GetContractRulesZodShape);
 
 export const PlaceOrderZodSchema = z
   .object(PlaceOrderZodShape)
@@ -282,6 +298,8 @@ export type GetPositionsInput = z.infer<typeof GetPositionsZodSchema>;
 export type GetOptionChainInput = z.infer<typeof GetOptionChainZodSchema>;
 export type ResolveOptionConidInput = z.infer<typeof ResolveOptionConidZodSchema>;
 export type GetMarketDataInput = z.infer<typeof GetMarketDataZodSchema>;
+export type GetContractDetailsInput = z.infer<typeof GetContractDetailsZodSchema>;
+export type GetContractRulesInput = z.infer<typeof GetContractRulesZodSchema>;
 export type PlaceOrderInput = z.infer<typeof PlaceOrderZodSchema>;
 export type GetOrderStatusInput = z.infer<typeof GetOrderStatusZodSchema>;
 export type GetLiveOrdersInput = z.infer<typeof GetLiveOrdersZodSchema>;

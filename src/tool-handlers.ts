@@ -12,6 +12,8 @@ import {
   GetOptionChainInput,
   ResolveOptionConidInput,
   GetMarketDataInput,
+  GetContractDetailsInput,
+  GetContractRulesInput,
   PlaceOrderInput,
   GetOrderStatusInput,
   GetLiveOrdersInput,
@@ -634,6 +636,28 @@ export class ToolHandlers {
           },
         ],
       };
+    }
+  }
+
+  async getContractDetails(input: GetContractDetailsInput): Promise<ToolHandlerResult> {
+    const auth = await this.ensureAuth();
+    if (!auth.ok) return auth.result;
+    try {
+      return this.jsonResult(await this.context.ibClient.getContractDetails(input.conids));
+    } catch (error) {
+      return this.textResult(this.formatError(error));
+    }
+  }
+
+  async getContractRules(input: GetContractRulesInput): Promise<ToolHandlerResult> {
+    const auth = await this.ensureAuth();
+    if (!auth.ok) return auth.result;
+    try {
+      return this.jsonResult(
+        await this.context.ibClient.getContractRules(input.conid, input.side, input.exchange),
+      );
+    } catch (error) {
+      return this.textResult(this.formatError(error));
     }
   }
 

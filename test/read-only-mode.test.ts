@@ -41,6 +41,8 @@ describe('Read-Only Mode Tool Registration', () => {
         // Verify read tools are also registered
         expect(registeredTools).toContain('get_positions');
         expect(registeredTools).toContain('get_market_data');
+        expect(registeredTools).toContain('get_contract_details');
+        expect(registeredTools).toContain('get_contract_rules');
     });
 
     it('should register ALL tools when read-only mode is EXPLICITLY FALSE', () => {

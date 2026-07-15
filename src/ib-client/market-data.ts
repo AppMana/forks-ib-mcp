@@ -17,6 +17,9 @@ function matchesExchange(contract: ContractSearch | OptionContractInfo, exchange
     "validExchanges" in contract ? contract.validExchanges : undefined,
     "description" in contract ? contract.description : undefined,
     "companyHeader" in contract ? contract.companyHeader : undefined,
+    "sections" in contract && Array.isArray(contract.sections)
+      ? contract.sections.map((section) => section.exchange).filter(Boolean).join(",")
+      : undefined,
   ]
     .filter((value): value is string => typeof value === "string")
     .map((value) => value.toUpperCase());
@@ -51,17 +54,16 @@ export async function getMarketData(
   exchange?: string,
 ): Promise<{ symbol: string; contract: ContractSearch; marketData: unknown }> {
   try {
-    let searchUrl = `/iserver/secdef/search?symbol=${encodeURIComponent(symbol)}`;
-    if (exchange) searchUrl += `&name=${encodeURIComponent(exchange)}`;
+    const searchUrl = `/iserver/secdef/search?symbol=${encodeURIComponent(symbol)}`;
     const searchResponse = await client.request<ContractSearch[]>("GET", searchUrl);
 
     if (!searchResponse.data || searchResponse.data.length === 0) {
       throw new SymbolNotFoundError(`Symbol ${symbol}${exchange ? " on " + exchange : ""} not found`);
     }
 
-    const contract = searchResponse.data[0];
+    const contract = pickContract(searchResponse.data, exchange);
     const response = await client.request("GET",
-      `/iserver/marketdata/snapshot?conids=${contract.conid}&fields=31,70,71,82,83,84,85,86,87,88`,
+      `/iserver/marketdata/snapshot?conids=${contract.conid}&fields=31,70,71,82,83,84,85,86,87,88,6509`,
     );
     return { symbol, contract, marketData: response.data };
   } catch (error: unknown) {
@@ -72,4 +74,30 @@ export async function getMarketData(
     if (error instanceof SymbolNotFoundError) throw error;
     throw new Error(`Failed to retrieve market data for ${symbol}`);
   }
+}
+
+export async function getContractDetails(
+  client: IBClientRequester,
+  conids: number[],
+): Promise<unknown> {
+  const response = await client.request("GET", "/trsrv/secdef", {
+    params: { conids: conids.join(",") },
+  });
+  return response.data;
+}
+
+export async function getContractRules(
+  client: IBClientRequester,
+  conid: number,
+  side: "BUY" | "SELL",
+  exchange?: string,
+): Promise<unknown> {
+  const body: Record<string, unknown> = {
+    conid,
+    isBuy: side === "BUY",
+  };
+  if (exchange) body.exchange = exchange;
+
+  const response = await client.request("POST", "/iserver/contract/rules", { body });
+  return response.data;
 }

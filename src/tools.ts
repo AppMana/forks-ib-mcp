@@ -14,6 +14,8 @@ import {
   GetFlexQueryZodShape,
   GetLiveOrdersZodShape,
   GetMarketDataZodShape,
+  GetContractDetailsZodShape,
+  GetContractRulesZodShape,
   GetOptionChainZodShape,
   GetOrderStatusZodShape,
   GetPositionsZodShape,
@@ -85,6 +87,20 @@ export function registerTools(
     "Get real-time market data. Usage: `{ \"symbol\": \"AAPL\" }` or `{ \"symbol\": \"AAPL\", \"exchange\": \"NASDAQ\" }`.",
     GetMarketDataZodShape,
     async (args) => await handlers.getMarketData(args),
+  );
+
+  registerTool(
+    "get_contract_details",
+    "Get IBKR security definitions for one or more contract IDs. Returns identity and classification metadata without relying on ticker matching. Usage: `{ \"conids\": [265598, 4815747] }`.",
+    GetContractDetailsZodShape,
+    async (args) => await handlers.getContractDetails(args),
+  );
+
+  registerTool(
+    "get_contract_rules",
+    "Get IBKR trading rules and permitted account IDs for a contract and side. This is read-only and does not place an order. Usage: `{ \"conid\": 4815747, \"side\": \"SELL\", \"exchange\": \"FUNDSERV\" }`.",
+    GetContractRulesZodShape,
+    async (args) => await handlers.getContractRules(args),
   );
 
   if (!userConfig?.IB_READ_ONLY_MODE) {

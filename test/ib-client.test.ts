@@ -367,28 +367,40 @@ describe('IBClient', () => {
 
       it('should not misuse the secdef name flag for exchange filtering', async () => {
         mockFetch
-          .mockResolvedValueOnce(mockResponse([{ conid: 265598, symbol: 'AAPL' }]))
+          .mockResolvedValueOnce(mockResponse([
+            { conid: 1, symbol: 'AAPL', exchange: 'LSE' },
+            { conid: 265598, symbol: 'AAPL', exchange: 'NASDAQ' },
+          ]))
           .mockResolvedValueOnce(mockResponse([{ conid: 265598, price: 150.25 }]));
 
-        await client.getMarketData('AAPL', 'NASDAQ');
+        const result = await client.getMarketData('AAPL', 'NASDAQ');
 
         expect(mockFetch).toHaveBeenCalledWith(
-          expect.stringContaining('/iserver/secdef/search?symbol=AAPL&name=NASDAQ'),
+          expect.stringContaining('/iserver/secdef/search?symbol=AAPL'),
           expect.objectContaining({ method: 'GET' })
         );
+        expect(mockFetch).not.toHaveBeenCalledWith(
+          expect.stringContaining('name=NASDAQ'),
+          expect.anything(),
+        );
+        expect(result.contract.conid).toBe(265598);
       });
 
-      it('should URL-encode the exchange parameter', async () => {
+      it('should select exchanges containing spaces without sending name', async () => {
         mockFetch
-          .mockResolvedValueOnce(mockResponse([{ conid: 265598, symbol: 'AAPL' }]))
+          .mockResolvedValueOnce(mockResponse([
+            { conid: 1, symbol: 'AAPL', exchange: 'LSE' },
+            { conid: 265598, symbol: 'AAPL', exchange: 'NYSE ARCA' },
+          ]))
           .mockResolvedValueOnce(mockResponse([{ conid: 265598, price: 150.25 }]));
 
-        await client.getMarketData('AAPL', 'NYSE ARCA');
+        const result = await client.getMarketData('AAPL', 'NYSE ARCA');
 
-        expect(mockFetch).toHaveBeenCalledWith(
-          expect.stringContaining('&name=NYSE%20ARCA'),
-          expect.anything()
+        expect(mockFetch).not.toHaveBeenCalledWith(
+          expect.stringContaining('&name='),
+          expect.anything(),
         );
+        expect(result.contract.conid).toBe(265598);
       });
 
       it('should mention the exchange in the not-found error when provided', async () => {
@@ -397,6 +409,39 @@ describe('IBClient', () => {
         await expect(client.getMarketData('INVALID', 'NASDAQ')).rejects.toThrow(
           'Symbol INVALID on NASDAQ not found'
         );
+      });
+
+      it('should fetch exact contract details for a batch of conids', async () => {
+        const details = { secdef: [{ conid: 4815747, ticker: 'FXAIX', assetClass: 'FND' }] };
+        mockFetch.mockResolvedValueOnce(mockResponse(details));
+
+        const result = await client.getContractDetails([4815747, 265598]);
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          expect.stringContaining('/trsrv/secdef?conids=4815747%2C265598'),
+          expect.objectContaining({ method: 'GET' }),
+        );
+        expect(result).toEqual(details);
+      });
+
+      it('should fetch account-aware sell rules without placing an order', async () => {
+        const rules = { canTradeAcctIds: ['U12345'], orderTypes: ['MKT'] };
+        mockFetch.mockResolvedValueOnce(mockResponse(rules));
+
+        const result = await client.getContractRules(4815747, 'SELL', 'FUNDSERV');
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          expect.stringContaining('/iserver/contract/rules'),
+          expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({ conid: 4815747, isBuy: false, exchange: 'FUNDSERV' }),
+          }),
+        );
+        expect(mockFetch).not.toHaveBeenCalledWith(
+          expect.stringContaining('/orders'),
+          expect.anything(),
+        );
+        expect(result).toEqual(rules);
       });
     });
 
@@ -869,7 +914,8 @@ describe('IBClient', () => {
         const position = [{ conid: 141432825, position: 37.625, assetClass: 'FUND' }];
         mockFetch
           .mockResolvedValueOnce(mockResponse(position))
-          .mockResolvedValueOnce(mockResponse([{ conid: 141432825, '31': '123.45' }]))
+          .mockResolvedValueOnce(mockResponse([]))
+          .mockResolvedValueOnce(mockResponse([{ conid: 141432825, '31': 'C123.45', '6509': 'RpB' }]))
           .mockResolvedValueOnce(mockResponse({ amount: { commission: '0.00' }, error: null }))
           .mockResolvedValueOnce(mockResponse(position))
           .mockResolvedValueOnce(mockResponse([{ order_id: 'fund-order-456' }]));
@@ -883,7 +929,7 @@ describe('IBClient', () => {
           fullPosition: true,
         };
 
-        await client.order({ mode: 'PREVIEW', ...sharedOrder });
+        const preview = await client.order({ mode: 'PREVIEW', ...sharedOrder }) as any;
         await client.order({ mode: 'SUBMIT', ...sharedOrder });
 
         const previewCall = mockFetch.mock.calls.find(([url]: [string]) =>
@@ -904,8 +950,47 @@ describe('IBClient', () => {
           quantity: 37.625,
         }));
         expect(mockFetch).toHaveBeenCalledWith(
-          expect.stringContaining('/iserver/marketdata/snapshot?conids=141432825&fields=31'),
+          expect.stringContaining('/iserver/marketdata/snapshot?conids=141432825&fields=31%2C6509'),
           expect.objectContaining({ method: 'GET' }),
+        );
+        expect(mockFetch.mock.calls.filter(([url]: [string]) =>
+          url.includes('/iserver/marketdata/snapshot?conids=141432825&fields=31%2C6509')
+        )).toHaveLength(2);
+        expect(preview.previewMarketData).toEqual(expect.objectContaining({
+          conid: 141432825,
+          rawPrice: 'C123.45',
+          price: 123.45,
+          priceType: 'PREVIOUS_CLOSE',
+          availability: 'RpB',
+          attempts: 2,
+          quantity: 37.625,
+          indicativeNotional: 123.45 * 37.625,
+        }));
+      });
+
+      it('should not call whatif when no usable market-data price becomes available', async () => {
+        mockFetch
+          .mockResolvedValueOnce(mockResponse([]))
+          .mockResolvedValueOnce(mockResponse([{ conid: 141432825, '31': 'N/A' }]))
+          .mockResolvedValueOnce(mockResponse([{ conid: 141432825, '31': '0' }]))
+          .mockResolvedValueOnce(mockResponse([{ conid: 141432825 }]));
+
+        await expect(client.order({
+          mode: 'PREVIEW',
+          accountId: 'U12345',
+          conid: 141432825,
+          secType: 'FUND',
+          action: 'SELL',
+          orderType: 'MKT',
+          quantity: 1,
+        })).rejects.toThrow('Market data unavailable for conid 141432825');
+
+        expect(mockFetch.mock.calls.filter(([url]: [string]) =>
+          url.includes('/iserver/marketdata/snapshot?conids=141432825&fields=31%2C6509')
+        )).toHaveLength(4);
+        expect(mockFetch).not.toHaveBeenCalledWith(
+          expect.stringContaining('/orders/whatif'),
+          expect.anything(),
         );
       });
 

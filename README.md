@@ -221,10 +221,18 @@ To reset the managed Gateway session, stop the Gateway process recorded in `ib-g
 | ------------------ | ----------------------------------------- |
 | `get_account_info` | Retrieve account information and balances |
 | `get_positions`    | Get current positions and P&L             |
-| `get_market_data`  | Real-time market data for symbols         |
+| `get_market_data`  | Market-data snapshot for the contract matching a symbol and exchange, including IBKR availability code `6509` |
+| `get_contract_details` | Batch exact-conid security definitions, including mutual-fund family, style, fees, and sell eligibility |
+| `get_contract_rules` | Read-only contract/side rules, including the account IDs IBKR reports as eligible to trade the contract |
 | `place_order`      | Preview (`PREVIEW`) or submit (`SUBMIT`) orders for all IBKR Web API order security types using one harmonized payload; supports FUNDSERV funds, crypto/combo `conidex`, cash quantities, and full-position closes |
 | `get_order_status` | Check order execution status              |
 | `get_live_orders`  | Get all live/open orders for monitoring   |
+
+`PREVIEW` warms the IBKR market-data snapshot before calling `/whatif`. The raw
+IBKR response is preserved, and object responses include `previewMarketData`
+with the exact normalized quantity, snapshot price type, and indicative
+notional. A `C`-prefixed mutual-fund price is explicitly labeled as the previous
+close/NAV because the next execution NAV is not known in advance.
 
 ### Flex Queries (Requires IB_FLEX_TOKEN)
 

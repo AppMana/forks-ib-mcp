@@ -4,6 +4,8 @@ import {
   PlaceOrderZodSchema,
   GetPositionsZodSchema,
   GetMarketDataZodSchema,
+  GetContractDetailsZodSchema,
+  GetContractRulesZodSchema,
   GetLiveOrdersZodSchema,
   GetOrderStatusZodSchema,
   ConfirmOrderZodSchema,
@@ -25,6 +27,27 @@ describe('Tool Definitions - Zod Schemas', () => {
     expect(IBKR_ORDER_SECURITY_TYPES).not.toContain('IND');
     expect(IBKR_ORDER_SECURITY_TYPES).not.toContain('CONTFUT');
     expect(IBKR_ORDER_SECURITY_TYPES).not.toContain('EC');
+  });
+
+  describe('Contract metadata schemas', () => {
+    it('should accept and normalize a batch of conids', () => {
+      const result = GetContractDetailsZodSchema.safeParse({ conids: ['141432825', 265598] });
+
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.conids).toEqual([141432825, 265598]);
+    });
+
+    it('should reject empty and oversized conid batches', () => {
+      expect(GetContractDetailsZodSchema.safeParse({ conids: [] }).success).toBe(false);
+      expect(GetContractDetailsZodSchema.safeParse({
+        conids: Array.from({ length: 101 }, (_, index) => index + 1),
+      }).success).toBe(false);
+    });
+
+    it('should require an explicit BUY or SELL side for rules', () => {
+      expect(GetContractRulesZodSchema.safeParse({ conid: '141432825', side: 'SELL' }).success).toBe(true);
+      expect(GetContractRulesZodSchema.safeParse({ conid: 141432825, side: 'SHORT' }).success).toBe(false);
+    });
   });
 
   describe('PlaceOrderZodSchema', () => {

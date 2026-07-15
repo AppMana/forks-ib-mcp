@@ -12,7 +12,7 @@ import {
 } from "./http.js";
 
 import { getAccountInfo, getPositions } from "./ib-client/accounts.js";
-import { getMarketData } from "./ib-client/market-data.js";
+import { getContractDetails, getContractRules, getMarketData } from "./ib-client/market-data.js";
 import { getOptionChain, resolveOptionConid } from "./ib-client/options.js";
 import { order, placeOrder, confirmOrder, getOrderStatus, getOrders } from "./ib-client/orders.js";
 import { getAlerts, createAlert, activateAlert, deleteAlert } from "./ib-client/alerts.js";
@@ -531,6 +531,18 @@ export class IBClient {
 
   async getMarketData(symbol: string, exchange?: string): Promise<{ symbol: string; contract: ContractSearch; marketData: unknown }> {
     return getMarketData(this, symbol, exchange);
+  }
+
+  async getContractDetails(conids: number[]): Promise<unknown> {
+    return getContractDetails(this, conids);
+  }
+
+  async getContractRules(
+    conid: number,
+    side: "BUY" | "SELL",
+    exchange?: string,
+  ): Promise<unknown> {
+    return getContractRules(this, conid, side, exchange);
   }
 
   async order(orderRequest: OrderRequest): Promise<unknown> {

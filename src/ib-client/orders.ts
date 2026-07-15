@@ -135,6 +135,95 @@ function positionEntries(data: unknown): Array<Record<string, unknown>> {
   return [];
 }
 
+const MARKET_DATA_SNAPSHOT_ATTEMPTS = 4;
+const MARKET_DATA_SNAPSHOT_DELAY_MS = 250;
+
+interface MarketDataPreview {
+  conid: number;
+  field: "31";
+  rawPrice: string | number;
+  price: number;
+  priceType: "LAST" | "PREVIOUS_CLOSE" | "HALTED";
+  availability?: string;
+  updated?: number;
+  attempts: number;
+}
+
+function snapshotEntries(data: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(data)) {
+    return data.filter((entry): entry is Record<string, unknown> =>
+      typeof entry === "object" && entry !== null
+    );
+  }
+  if (typeof data === "object" && data !== null) {
+    return [data as Record<string, unknown>];
+  }
+  return [];
+}
+
+function extractSnapshotPrice(data: unknown, conid: number): Omit<MarketDataPreview, "attempts"> | undefined {
+  for (const entry of snapshotEntries(data)) {
+    if (entry.conid !== undefined && Number(entry.conid) !== conid) continue;
+
+    const rawPrice = entry["31"];
+    if (typeof rawPrice !== "number" && typeof rawPrice !== "string") continue;
+
+    // IBKR prefixes delayed/closing values with a letter, for example "C262.16".
+    const rawText = String(rawPrice).trim();
+    const normalizedPrice = rawText.replace(/^[A-Za-z]+/, "");
+    const price = Number(normalizedPrice.replaceAll(",", ""));
+    if (!Number.isFinite(price) || price <= 0) continue;
+
+    const prefix = rawText.match(/^[A-Za-z]+/)?.[0]?.toUpperCase();
+    return {
+      conid,
+      field: "31",
+      rawPrice,
+      price,
+      priceType: prefix?.includes("C")
+        ? "PREVIOUS_CLOSE"
+        : prefix?.includes("H") ? "HALTED" : "LAST",
+      availability: typeof entry["6509"] === "string" ? entry["6509"] : undefined,
+      updated: Number.isFinite(Number(entry._updated)) ? Number(entry._updated) : undefined,
+    };
+  }
+  return undefined;
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function warmMarketDataSnapshot(
+  client: IBClientRequester,
+  conid: number,
+): Promise<MarketDataPreview> {
+  let receivedPrice: Omit<MarketDataPreview, "attempts"> | undefined;
+
+  for (let attempt = 1; attempt <= MARKET_DATA_SNAPSHOT_ATTEMPTS; attempt += 1) {
+    const response = await client.request("GET", "/iserver/marketdata/snapshot", {
+      params: { conids: String(conid), fields: "31,6509" },
+    });
+    const currentPrice = extractSnapshotPrice(response.data, conid);
+    if (currentPrice) receivedPrice = currentPrice;
+
+    // IBKR documents the first snapshot request as a subscription preflight. Always
+    // poll at least once more so /whatif runs only after the subscription is warm.
+    if (currentPrice && attempt >= 2) return { ...currentPrice, attempts: attempt };
+    if (attempt < MARKET_DATA_SNAPSHOT_ATTEMPTS) {
+      await delay(MARKET_DATA_SNAPSHOT_DELAY_MS);
+    }
+  }
+
+  if (receivedPrice) {
+    return { ...receivedPrice, attempts: MARKET_DATA_SNAPSHOT_ATTEMPTS };
+  }
+
+  throw new Error(
+    `Market data unavailable for conid ${conid}: no usable price after ${MARKET_DATA_SNAPSHOT_ATTEMPTS} snapshot requests`,
+  );
+}
+
 async function resolveFullPositionQuantity(
   client: IBClientRequester,
   accountId: string,
@@ -276,11 +365,10 @@ export async function order(client: IBClientRequester, orderRequest: OrderReques
       ? `/iserver/account/${orderRequest.accountId}/orders/whatif`
       : `/iserver/account/${orderRequest.accountId}/orders`;
 
-    if (orderRequest.mode === "PREVIEW" && builtOrder.referenceConid !== undefined) {
-      await client.request("GET", "/iserver/marketdata/snapshot", {
-        params: { conids: String(builtOrder.referenceConid), fields: "31" },
-      });
-    }
+    const marketData = orderRequest.mode === "PREVIEW"
+      && builtOrder.referenceConid !== undefined
+      ? await warmMarketDataSnapshot(client, builtOrder.referenceConid)
+      : undefined;
 
     const response = await client.request<unknown>(
       "POST",
@@ -294,6 +382,27 @@ export async function order(client: IBClientRequester, orderRequest: OrderReques
         Logger.log("Order confirmation received, automatically confirming", first);
         return await confirmOrder(client, first.id, first.messageIds);
       }
+    }
+    if (
+      orderRequest.mode === "PREVIEW"
+      && marketData
+      && typeof response.data === "object"
+      && response.data !== null
+      && !Array.isArray(response.data)
+    ) {
+      return {
+        ...(response.data as Record<string, unknown>),
+        previewMarketData: {
+          ...marketData,
+          quantity: orderPayload.quantity,
+          cashQuantity: orderPayload.cashQty,
+          indicativeNotional: orderPayload.cashQty
+            ?? marketData.price * (orderPayload.quantity ?? 0),
+          note: marketData.priceType === "PREVIOUS_CLOSE"
+            ? "Indicative value based on the prior close/NAV; a mutual-fund market order executes at its next calculated NAV."
+            : "Indicative value from the latest available snapshot; execution price is not guaranteed.",
+        },
+      };
     }
     return response.data;
   } catch (error: unknown) {
