@@ -40,6 +40,7 @@ describe('ToolHandlers', () => {
       order: vi.fn().mockResolvedValue({ orderId: '123' }),
       placeOrder: vi.fn().mockResolvedValue({ orderId: '123' }),
       getOrderStatus: vi.fn().mockResolvedValue({ status: 'Filled' }),
+      cancelOrder: vi.fn().mockResolvedValue({ order_id: '123', msg: 'Request was submitted' }),
       getTrades: vi.fn().mockResolvedValue([]),
       getOrders: vi.fn().mockResolvedValue([]),
       confirmOrder: vi.fn().mockResolvedValue({ confirmed: true }),
@@ -304,6 +305,15 @@ describe('ToolHandlers', () => {
 
       expect(result.content).toBeDefined();
       expect(mockIBClient.getOrderStatus).toHaveBeenCalledWith('U12345', '123');
+    });
+  });
+
+  describe('cancelOrder', () => {
+    it('should cancel the order in the specified account', async () => {
+      const result = await handlers.cancelOrder({ accountId: 'U12345', orderId: '123' });
+
+      expect(result.content).toBeDefined();
+      expect(mockIBClient.cancelOrder).toHaveBeenCalledWith('U12345', '123');
     });
   });
 

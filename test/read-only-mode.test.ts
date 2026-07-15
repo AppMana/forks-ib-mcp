@@ -33,6 +33,7 @@ describe('Read-Only Mode Tool Registration', () => {
 
         // Verify write tools are registered
         expect(registeredTools).toContain('place_order');
+        expect(registeredTools).toContain('cancel_order');
         expect(registeredTools).toContain('confirm_order');
         expect(registeredTools).toContain('create_alert');
         expect(registeredTools).toContain('activate_alert');
@@ -50,6 +51,7 @@ describe('Read-Only Mode Tool Registration', () => {
         registerTools(mockMcpServer, mockIBClient, mockGatewayManager, config);
 
         expect(registeredTools).toContain('place_order');
+        expect(registeredTools).toContain('cancel_order');
         expect(registeredTools).toContain('confirm_order');
         expect(registeredTools).toContain('create_alert');
         expect(registeredTools).toContain('activate_alert');
@@ -62,6 +64,7 @@ describe('Read-Only Mode Tool Registration', () => {
 
         // Verify write tools are NOT registered
         expect(registeredTools).not.toContain('place_order');
+        expect(registeredTools).not.toContain('cancel_order');
         expect(registeredTools).not.toContain('confirm_order');
         expect(registeredTools).not.toContain('create_alert');
         expect(registeredTools).not.toContain('activate_alert');

@@ -5,6 +5,7 @@ import { ToolHandlers, type ToolHandlerContext } from "./tool-handlers.js";
 import {
   ActivateAlertZodShape,
   AuthenticateZodShape,
+  CancelOrderZodShape,
   ConfirmOrderZodShape,
   CreateAlertZodShape,
   DeleteAlertZodShape,
@@ -126,6 +127,15 @@ export function registerTools(
     GetOrderStatusZodShape,
     async (args) => await handlers.getOrderStatus(args),
   );
+
+  if (!userConfig?.IB_READ_ONLY_MODE) {
+    registerTool(
+      "cancel_order",
+      "Cancel one live order after selecting its subaccount. Usage: `{ \"accountId\": \"U12345\", \"orderId\": \"12345\" }`.",
+      CancelOrderZodShape,
+      async (args) => await handlers.cancelOrder(args),
+    );
+  }
 
   registerTool(
     "get_trades",

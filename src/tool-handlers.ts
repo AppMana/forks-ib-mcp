@@ -16,6 +16,7 @@ import {
   GetContractRulesInput,
   PlaceOrderInput,
   GetOrderStatusInput,
+  CancelOrderInput,
   GetTradesInput,
   GetAccountLedgerInput,
   GetLiveOrdersInput,
@@ -794,6 +795,18 @@ export class ToolHandlers {
           },
         ],
       };
+    }
+  }
+
+  async cancelOrder(input: CancelOrderInput): Promise<ToolHandlerResult> {
+    const auth = await this.ensureAuth();
+    if (!auth.ok) return auth.result;
+    try {
+      return this.jsonResult(
+        await this.context.ibClient.cancelOrder(input.accountId, input.orderId),
+      );
+    } catch (error) {
+      return this.textResult(this.formatError(error));
     }
   }
 

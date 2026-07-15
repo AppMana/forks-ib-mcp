@@ -8,6 +8,7 @@ import {
   GetContractRulesZodSchema,
   GetLiveOrdersZodSchema,
   GetOrderStatusZodSchema,
+  CancelOrderZodSchema,
   GetTradesZodSchema,
   GetAccountLedgerZodSchema,
   ConfirmOrderZodSchema,
@@ -29,6 +30,11 @@ describe('Tool Definitions - Zod Schemas', () => {
     expect(IBKR_ORDER_SECURITY_TYPES).not.toContain('IND');
     expect(IBKR_ORDER_SECURITY_TYPES).not.toContain('CONTFUT');
     expect(IBKR_ORDER_SECURITY_TYPES).not.toContain('EC');
+  });
+
+  it('should require both account and order IDs to cancel an order', () => {
+    expect(CancelOrderZodSchema.safeParse({ accountId: 'U12345', orderId: '123' }).success).toBe(true);
+    expect(CancelOrderZodSchema.safeParse({ accountId: 'U12345' }).success).toBe(false);
   });
 
   describe('Contract metadata schemas', () => {

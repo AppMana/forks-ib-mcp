@@ -472,6 +472,29 @@ export async function getOrderStatus(
   }
 }
 
+export async function cancelOrder(
+  client: IBClientRequester,
+  accountId: string,
+  orderId: string,
+): Promise<unknown> {
+  try {
+    await selectIserverAccount(client, accountId);
+    const response = await client.request(
+      "DELETE",
+      `/iserver/account/${encodeURIComponent(accountId)}/order/${encodeURIComponent(orderId)}`,
+    );
+    return response.data;
+  } catch (error: unknown) {
+    Logger.error(`Failed to cancel order ${orderId} for account ${accountId}:`, error);
+    if (isAuthenticationError(error)) {
+      throw new AuthenticationError(
+        `Authentication required to cancel order ${orderId} for account ${accountId}. Please authenticate with Interactive Brokers first.`,
+      );
+    }
+    throw new Error(`Failed to cancel order ${orderId} for account ${accountId}`, { cause: error });
+  }
+}
+
 export async function getTrades(
   client: IBClientRequester,
   accountId: string,

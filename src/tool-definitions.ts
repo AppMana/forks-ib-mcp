@@ -80,6 +80,11 @@ export const GetOrderStatusZodShape = {
   orderId: z.string()
 };
 
+export const CancelOrderZodShape = {
+  accountId: z.string(),
+  orderId: z.string()
+};
+
 export const GetTradesZodShape = {
   accountId: z.string(),
   days: z.number().int().min(1).max(7).optional(),
@@ -292,6 +297,7 @@ export const PlaceOrderZodSchema = z
   });
 
 export const GetOrderStatusZodSchema = z.object(GetOrderStatusZodShape);
+export const CancelOrderZodSchema = z.object(CancelOrderZodShape);
 export const GetTradesZodSchema = z.object(GetTradesZodShape);
 export const GetAccountLedgerZodSchema = z.object(GetAccountLedgerZodShape);
 export const GetLiveOrdersZodSchema = z.object(GetLiveOrdersZodShape);
@@ -314,6 +320,7 @@ export type GetContractDetailsInput = z.infer<typeof GetContractDetailsZodSchema
 export type GetContractRulesInput = z.infer<typeof GetContractRulesZodSchema>;
 export type PlaceOrderInput = z.infer<typeof PlaceOrderZodSchema>;
 export type GetOrderStatusInput = z.infer<typeof GetOrderStatusZodSchema>;
+export type CancelOrderInput = z.infer<typeof CancelOrderZodSchema>;
 export type GetTradesInput = z.infer<typeof GetTradesZodSchema>;
 export type GetAccountLedgerInput = z.infer<typeof GetAccountLedgerZodSchema>;
 export type GetLiveOrdersInput = z.infer<typeof GetLiveOrdersZodSchema>;

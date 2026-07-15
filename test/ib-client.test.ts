@@ -1128,6 +1128,31 @@ describe('IBClient', () => {
         expect(result).toEqual(mockOrderStatus);
       });
 
+      it('should select the subaccount and cancel through the account-scoped endpoint', async () => {
+        const mockCancellation = { order_id: '123', msg: 'Request was submitted' };
+
+        mockFetch
+          .mockResolvedValueOnce(mockResponse({ set: true, acctId: 'U12345' }))
+          .mockResolvedValueOnce(mockResponse(mockCancellation));
+
+        const result = await client.cancelOrder('U12345', '123');
+
+        expect(mockFetch).toHaveBeenNthCalledWith(
+          1,
+          expect.stringContaining('/iserver/account'),
+          expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({ acctId: 'U12345' }),
+          }),
+        );
+        expect(mockFetch).toHaveBeenNthCalledWith(
+          2,
+          expect.stringContaining('/iserver/account/U12345/order/123'),
+          expect.objectContaining({ method: 'DELETE' }),
+        );
+        expect(result).toEqual(mockCancellation);
+      });
+
       it('should select the subaccount before fetching executions', async () => {
         const trades = [{ execution_id: 'exec-1', account: 'U12345' }];
         mockFetch
