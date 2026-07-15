@@ -18,6 +18,8 @@ import {
   GetContractRulesZodShape,
   GetOptionChainZodShape,
   GetOrderStatusZodShape,
+  GetTradesZodShape,
+  GetAccountLedgerZodShape,
   GetPositionsZodShape,
   ListFlexQueriesZodShape,
   PlaceOrderZodShape,
@@ -120,9 +122,23 @@ export function registerTools(
 
   registerTool(
     "get_order_status",
-    "Get the status of a specific order. Usage: `{ \"orderId\": \"12345\" }`.",
+    "Get the status of a specific order after selecting its subaccount. Usage: `{ \"accountId\": \"U12345\", \"orderId\": \"12345\" }`.",
     GetOrderStatusZodShape,
     async (args) => await handlers.getOrderStatus(args),
+  );
+
+  registerTool(
+    "get_trades",
+    "Get actual executions for a selected account for the current day or up to seven days. Usage: `{ \"accountId\": \"U12345\", \"days\": 3 }`.",
+    GetTradesZodShape,
+    async (args) => await handlers.getTrades(args),
+  );
+
+  registerTool(
+    "get_account_ledger",
+    "Get account cash balances by currency, including settledCash. Usage: `{ \"accountId\": \"U12345\" }`.",
+    GetAccountLedgerZodShape,
+    async (args) => await handlers.getAccountLedger(args),
   );
 
   registerTool(

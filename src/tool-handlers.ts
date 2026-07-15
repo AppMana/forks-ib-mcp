@@ -16,6 +16,8 @@ import {
   GetContractRulesInput,
   PlaceOrderInput,
   GetOrderStatusInput,
+  GetTradesInput,
+  GetAccountLedgerInput,
   GetLiveOrdersInput,
   ConfirmOrderInput,
   GetAlertsInput,
@@ -774,7 +776,7 @@ export class ToolHandlers {
       return auth.result;
     }
     try {
-      const result = await this.context.ibClient.getOrderStatus(input.orderId);
+      const result = await this.context.ibClient.getOrderStatus(input.accountId, input.orderId);
       return {
         content: [
           {
@@ -792,6 +794,28 @@ export class ToolHandlers {
           },
         ],
       };
+    }
+  }
+
+  async getTrades(input: GetTradesInput): Promise<ToolHandlerResult> {
+    const auth = await this.ensureAuth();
+    if (!auth.ok) return auth.result;
+    try {
+      return this.jsonResult(
+        await this.context.ibClient.getTrades(input.accountId, input.days),
+      );
+    } catch (error) {
+      return this.textResult(this.formatError(error));
+    }
+  }
+
+  async getAccountLedger(input: GetAccountLedgerInput): Promise<ToolHandlerResult> {
+    const auth = await this.ensureAuth();
+    if (!auth.ok) return auth.result;
+    try {
+      return this.jsonResult(await this.context.ibClient.getAccountLedger(input.accountId));
+    } catch (error) {
+      return this.textResult(this.formatError(error));
     }
   }
 

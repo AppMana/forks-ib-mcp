@@ -11,10 +11,10 @@ import {
   type RequestOptions,
 } from "./http.js";
 
-import { getAccountInfo, getPositions } from "./ib-client/accounts.js";
+import { getAccountInfo, getAccountLedger, getPositions } from "./ib-client/accounts.js";
 import { getContractDetails, getContractRules, getMarketData } from "./ib-client/market-data.js";
 import { getOptionChain, resolveOptionConid } from "./ib-client/options.js";
-import { order, placeOrder, confirmOrder, getOrderStatus, getOrders } from "./ib-client/orders.js";
+import { order, placeOrder, confirmOrder, getOrderStatus, getOrders, getTrades } from "./ib-client/orders.js";
 import { getAlerts, createAlert, activateAlert, deleteAlert } from "./ib-client/alerts.js";
 import {
   type AuthStatusResponse,
@@ -504,6 +504,10 @@ export class IBClient {
     return getPositions(this, accountId);
   }
 
+  async getAccountLedger(accountId: string): Promise<unknown> {
+    return getAccountLedger(this, accountId);
+  }
+
   async getOptionChain(
     symbol: string,
     exchange?: string,
@@ -557,8 +561,12 @@ export class IBClient {
     return confirmOrder(this, replyId, messageIds);
   }
 
-  async getOrderStatus(orderId: string): Promise<unknown> {
-    return getOrderStatus(this, orderId);
+  async getOrderStatus(accountId: string, orderId: string): Promise<unknown> {
+    return getOrderStatus(this, accountId, orderId);
+  }
+
+  async getTrades(accountId: string, days?: number): Promise<unknown> {
+    return getTrades(this, accountId, days);
   }
 
   async getOrders(accountId?: string): Promise<unknown> {

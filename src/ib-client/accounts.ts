@@ -135,3 +135,21 @@ export async function getPositions(
     throw new Error("Failed to retrieve positions");
   }
 }
+
+export async function getAccountLedger(
+  client: IBClientRequester,
+  accountId: string,
+): Promise<unknown> {
+  try {
+    const response = await client.request("GET", `/portfolio/${accountId}/ledger`);
+    return response.data;
+  } catch (error: unknown) {
+    Logger.error(`Failed to get ledger for account ${accountId}:`, error);
+    if (isAuthenticationError(error)) {
+      throw new AuthenticationError(
+        `Authentication required to retrieve the ledger for account ${accountId}. Please authenticate with Interactive Brokers first.`,
+      );
+    }
+    throw new Error(`Failed to retrieve ledger for account ${accountId}`);
+  }
+}

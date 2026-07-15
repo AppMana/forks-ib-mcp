@@ -8,6 +8,8 @@ import {
   GetContractRulesZodSchema,
   GetLiveOrdersZodSchema,
   GetOrderStatusZodSchema,
+  GetTradesZodSchema,
+  GetAccountLedgerZodSchema,
   ConfirmOrderZodSchema,
   CreateAlertZodSchema,
   ActivateAlertZodSchema,
@@ -503,8 +505,21 @@ describe('Tool Definitions - Zod Schemas', () => {
     });
 
     it('should accept valid orderId', () => {
-      const result = GetOrderStatusZodSchema.safeParse({ orderId: '12345' });
+      const result = GetOrderStatusZodSchema.safeParse({ accountId: 'U12345', orderId: '12345' });
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('Execution and ledger schemas', () => {
+    it('should accept a one-to-seven-day execution range', () => {
+      expect(GetTradesZodSchema.safeParse({ accountId: 'U12345', days: 1 }).success).toBe(true);
+      expect(GetTradesZodSchema.safeParse({ accountId: 'U12345', days: 7 }).success).toBe(true);
+      expect(GetTradesZodSchema.safeParse({ accountId: 'U12345', days: 8 }).success).toBe(false);
+    });
+
+    it('should require an account for ledger requests', () => {
+      expect(GetAccountLedgerZodSchema.safeParse({ accountId: 'U12345' }).success).toBe(true);
+      expect(GetAccountLedgerZodSchema.safeParse({}).success).toBe(false);
     });
   });
 

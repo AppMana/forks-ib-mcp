@@ -334,6 +334,19 @@ describe('IBClient', () => {
         );
         expect(result).toEqual(mockPositions);
       });
+
+      it('should fetch the account ledger including settled cash', async () => {
+        const ledger = { USD: { cashbalance: 1000, settledcash: 750 } };
+        mockFetch.mockResolvedValueOnce(mockResponse(ledger));
+
+        const result = await client.getAccountLedger('U12345');
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          expect.stringContaining('/portfolio/U12345/ledger'),
+          expect.objectContaining({ method: 'GET' }),
+        );
+        expect(result).toEqual(ledger);
+      });
     });
 
     describe('getMarketData', () => {
@@ -1090,18 +1103,50 @@ describe('IBClient', () => {
     });
 
     describe('getOrderStatus', () => {
-      it('should fetch order status by ID', async () => {
+      it('should select the subaccount and fetch order status from the official endpoint', async () => {
         const mockOrderStatus = { orderId: '123', status: 'Filled' };
 
-        mockFetch.mockResolvedValueOnce(mockResponse(mockOrderStatus));
+        mockFetch
+          .mockResolvedValueOnce(mockResponse({ set: true, acctId: 'U12345' }))
+          .mockResolvedValueOnce(mockResponse(mockOrderStatus));
 
-        const result = await client.getOrderStatus('123');
+        const result = await client.getOrderStatus('U12345', '123');
 
-        expect(mockFetch).toHaveBeenCalledWith(
-          expect.stringContaining('/iserver/account/orders/123'),
-          expect.objectContaining({ method: 'GET' })
+        expect(mockFetch).toHaveBeenNthCalledWith(
+          1,
+          expect.stringContaining('/iserver/account'),
+          expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({ acctId: 'U12345' }),
+          }),
+        );
+        expect(mockFetch).toHaveBeenNthCalledWith(
+          2,
+          expect.stringContaining('/iserver/account/order/status/123'),
+          expect.objectContaining({ method: 'GET' }),
         );
         expect(result).toEqual(mockOrderStatus);
+      });
+
+      it('should select the subaccount before fetching executions', async () => {
+        const trades = [{ execution_id: 'exec-1', account: 'U12345' }];
+        mockFetch
+          .mockResolvedValueOnce(mockResponse({ set: true, acctId: 'U12345' }))
+          .mockResolvedValueOnce(mockResponse(trades));
+
+        const result = await client.getTrades('U12345', 3);
+
+        expect(mockFetch).toHaveBeenNthCalledWith(
+          1,
+          expect.stringContaining('/iserver/account'),
+          expect.objectContaining({ method: 'POST' }),
+        );
+        expect(mockFetch).toHaveBeenNthCalledWith(
+          2,
+          expect.stringContaining('/iserver/account/trades?days=3'),
+          expect.objectContaining({ method: 'GET' }),
+        );
+        expect(result).toEqual(trades);
       });
     });
 

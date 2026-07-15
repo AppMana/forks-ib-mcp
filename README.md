@@ -227,6 +227,8 @@ To reset the managed Gateway session, stop the Gateway process recorded in `ib-g
 | `place_order`      | Preview (`PREVIEW`) or submit (`SUBMIT`) orders for all IBKR Web API order security types using one harmonized payload; supports FUNDSERV funds, crypto/combo `conidex`, cash quantities, and full-position closes |
 | `get_order_status` | Check order execution status              |
 | `get_live_orders`  | Get all live/open orders for monitoring   |
+| `get_trades`       | Get definitive executions for a selected subaccount for up to seven days |
+| `get_account_ledger` | Get cash and settled-cash balances by currency for one account |
 
 `PREVIEW` warms the IBKR market-data snapshot before calling `/whatif`. The raw
 IBKR response is preserved, and object responses include `previewMarketData`

@@ -33,12 +33,14 @@ describe('ToolHandlers', () => {
       reauthenticate: vi.fn().mockResolvedValue(undefined),
       getAccountInfo: vi.fn().mockResolvedValue({ accounts: [] }),
       getPositions: vi.fn().mockResolvedValue([]),
+      getAccountLedger: vi.fn().mockResolvedValue({ USD: { settledcash: 0 } }),
       getMarketData: vi.fn().mockResolvedValue({ price: 150 }),
       getContractDetails: vi.fn().mockResolvedValue({ secdef: [] }),
       getContractRules: vi.fn().mockResolvedValue({ canTradeAcctIds: [] }),
       order: vi.fn().mockResolvedValue({ orderId: '123' }),
       placeOrder: vi.fn().mockResolvedValue({ orderId: '123' }),
       getOrderStatus: vi.fn().mockResolvedValue({ status: 'Filled' }),
+      getTrades: vi.fn().mockResolvedValue([]),
       getOrders: vi.fn().mockResolvedValue([]),
       confirmOrder: vi.fn().mockResolvedValue({ confirmed: true }),
       destroy: vi.fn(),
@@ -298,10 +300,24 @@ describe('ToolHandlers', () => {
       const mockStatus = { orderId: '123', status: 'Filled' };
       mockIBClient.getOrderStatus = vi.fn().mockResolvedValue(mockStatus);
 
-      const result = await handlers.getOrderStatus({ orderId: '123' });
+      const result = await handlers.getOrderStatus({ accountId: 'U12345', orderId: '123' });
 
       expect(result.content).toBeDefined();
-      expect(mockIBClient.getOrderStatus).toHaveBeenCalledWith('123');
+      expect(mockIBClient.getOrderStatus).toHaveBeenCalledWith('U12345', '123');
+    });
+  });
+
+  describe('execution and cash monitoring', () => {
+    it('should return executions for a selected account and day range', async () => {
+      await handlers.getTrades({ accountId: 'U12345', days: 3 });
+
+      expect(mockIBClient.getTrades).toHaveBeenCalledWith('U12345', 3);
+    });
+
+    it('should return the selected account ledger', async () => {
+      await handlers.getAccountLedger({ accountId: 'U12345' });
+
+      expect(mockIBClient.getAccountLedger).toHaveBeenCalledWith('U12345');
     });
   });
 

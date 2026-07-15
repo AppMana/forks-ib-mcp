@@ -435,9 +435,33 @@ export async function confirmOrder(client: IBClientRequester, replyId: string, m
   }
 }
 
-export async function getOrderStatus(client: IBClientRequester, orderId: string): Promise<unknown> {
+async function selectIserverAccount(
+  client: IBClientRequester,
+  accountId: string,
+): Promise<void> {
+  const response = await client.request("POST", "/iserver/account", {
+    body: { acctId: accountId },
+  });
+  if (
+    typeof response.data === "object"
+    && response.data !== null
+    && (response.data as Record<string, unknown>).set === false
+  ) {
+    throw new Error(`IBKR did not select account ${accountId}`);
+  }
+}
+
+export async function getOrderStatus(
+  client: IBClientRequester,
+  accountId: string,
+  orderId: string,
+): Promise<unknown> {
   try {
-    const response = await client.request("GET", `/iserver/account/orders/${orderId}`);
+    await selectIserverAccount(client, accountId);
+    const response = await client.request(
+      "GET",
+      `/iserver/account/order/status/${encodeURIComponent(orderId)}`,
+    );
     return response.data;
   } catch (error: unknown) {
     Logger.error("Failed to get order status:", error);
@@ -445,6 +469,28 @@ export async function getOrderStatus(client: IBClientRequester, orderId: string)
       throw new AuthenticationError(`Authentication required to get order status for order ${orderId}. Please authenticate with Interactive Brokers first.`);
     }
     throw new Error(`Failed to get status for order ${orderId}`);
+  }
+}
+
+export async function getTrades(
+  client: IBClientRequester,
+  accountId: string,
+  days = 1,
+): Promise<unknown> {
+  try {
+    await selectIserverAccount(client, accountId);
+    const response = await client.request("GET", "/iserver/account/trades", {
+      params: { days: String(days) },
+    });
+    return response.data;
+  } catch (error: unknown) {
+    Logger.error(`Failed to get trades for account ${accountId}:`, error);
+    if (isAuthenticationError(error)) {
+      throw new AuthenticationError(
+        `Authentication required to retrieve trades for account ${accountId}. Please authenticate with Interactive Brokers first.`,
+      );
+    }
+    throw new Error(`Failed to retrieve trades for account ${accountId}`);
   }
 }
 

@@ -73,6 +73,8 @@ describe('Read-Only Mode Tool Registration', () => {
         expect(registeredTools).toContain('get_account_info');
         expect(registeredTools).toContain('get_live_orders');
         expect(registeredTools).toContain('get_order_status');
+        expect(registeredTools).toContain('get_trades');
+        expect(registeredTools).toContain('get_account_ledger');
         expect(registeredTools).toContain('get_alerts');
     });
 });
