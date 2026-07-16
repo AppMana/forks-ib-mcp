@@ -5,6 +5,7 @@ import { IBClient } from '../src/ib-client.js';
 import { IBGatewayManager } from '../src/gateway-manager.js';
 import { HeadlessAuthenticator } from '../src/headless-auth.js';
 import open from 'open';
+import { HttpError } from '../src/http.js';
 
 // Mock dependencies
 vi.mock('../src/ib-client.js');
@@ -620,6 +621,31 @@ describe('ToolHandlers', () => {
       const result = await handlers.getAccountInfo({ confirm: true });
 
       expect(result.content[0].text).toContain('Generic error');
+    });
+
+    it('should expose structured IBKR HTTP 500 errors without treating them as authentication', async () => {
+      mockIBClient.order = vi.fn().mockRejectedValue(new HttpError(
+        'Request failed with status 500',
+        {
+          status: 500,
+          statusText: 'Internal Server Error',
+          data: { error: "U12345 doesn't have permission to trade fractional shares" },
+        },
+      ));
+
+      const result = await handlers.placeOrder({
+        mode: 'PREVIEW',
+        accountId: 'U12345',
+        conid: 265598,
+        secType: 'STK',
+        action: 'BUY',
+        orderType: 'LMT',
+        quantity: 0.5,
+        price: 160,
+      });
+
+      expect(result.content[0].text).toContain("U12345 doesn't have permission to trade fractional shares");
+      expect(result.content[0].text).not.toContain('Authentication required');
     });
 
     it('should handle non-Error objects', async () => {

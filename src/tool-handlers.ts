@@ -5,6 +5,8 @@ import open from "open";
 import { Logger } from "./logger.js";
 import { FlexQueryClient } from "./flex-query-client.js";
 import { FlexQueryStorage } from "./flex-query-storage.js";
+import { getErrorMessage } from "./http.js";
+import { isAuthenticationError as isIBAuthenticationError } from "./ib-client/types.js";
 import {
   AuthenticateInput,
   GetAccountInfoInput,
@@ -315,22 +317,7 @@ export class ToolHandlers {
   // Helper function to check for authentication errors
   private isAuthenticationError(error: any): boolean {
     if (!error) return false;
-
-    const errorMessage = error.message || error.toString();
-    const errorStatus = error.response?.status;
-    const responseData = error.response?.data;
-
-    return (
-      errorStatus === 401 ||
-      errorStatus === 403 ||
-      errorStatus === 500 ||
-      this.isTransportError(error) ||
-      errorMessage.includes("authentication") ||
-      errorMessage.includes("unauthorized") ||
-      errorMessage.includes("not authenticated") ||
-      errorMessage.includes("login") ||
-      responseData?.error === "not authenticated"
-    );
+    return this.isTransportError(error) || isIBAuthenticationError(error);
   }
 
   private getAuthenticationErrorMessage(): string {
@@ -395,8 +382,7 @@ export class ToolHandlers {
       return this.getAuthenticationErrorMessage();
     }
     
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return `Error: ${errorMessage}`;
+    return `Error: ${getErrorMessage(error)}`;
   }
 
   async authenticate(input: AuthenticateInput): Promise<ToolHandlerResult> {

@@ -1,5 +1,5 @@
 import { Logger } from "../logger.js";
-import { isHttpError, type HttpResponse, type RequestOptions } from "../http.js";
+import { getErrorMessage, isHttpError, type HttpResponse, type RequestOptions } from "../http.js";
 import {
   type AccountEntry,
   AuthenticationError,
@@ -115,7 +115,7 @@ export async function getAccountInfo(
     if (isAuthenticationError(error)) {
       throw new AuthenticationError("Authentication required to retrieve account information. Please authenticate with Interactive Brokers first.");
     }
-    throw new Error("Failed to retrieve account information");
+    throw new Error(`Failed to retrieve account information: ${getErrorMessage(error)}`, { cause: error });
   }
 }
 
@@ -132,7 +132,7 @@ export async function getPositions(
     if (isAuthenticationError(error)) {
       throw new AuthenticationError("Authentication required to retrieve positions. Please authenticate with Interactive Brokers first.");
     }
-    throw new Error("Failed to retrieve positions");
+    throw new Error(`Failed to retrieve positions: ${getErrorMessage(error)}`, { cause: error });
   }
 }
 
@@ -150,6 +150,9 @@ export async function getAccountLedger(
         `Authentication required to retrieve the ledger for account ${accountId}. Please authenticate with Interactive Brokers first.`,
       );
     }
-    throw new Error(`Failed to retrieve ledger for account ${accountId}`);
+    throw new Error(
+      `Failed to retrieve ledger for account ${accountId}: ${getErrorMessage(error)}`,
+      { cause: error },
+    );
   }
 }

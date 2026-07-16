@@ -595,6 +595,34 @@ describe('IBClient', () => {
         ).rejects.toThrow('Symbol INVALID not found');
       });
 
+      it('should preserve a meaningful IBKR HTTP 500 error instead of relabeling it as authentication', async () => {
+        mockFetch
+          .mockResolvedValueOnce(mockResponse([]))
+          .mockResolvedValueOnce(mockResponse([{
+            conid: 265598,
+            '31': '150.00',
+            '6509': 'DPB',
+          }]))
+          .mockResolvedValueOnce(mockResponse({
+            error: "U12345 doesn't have permission to trade fractional shares",
+          }, 500));
+
+        const preview = client.order({
+          mode: 'PREVIEW',
+          accountId: 'U12345',
+          conid: 265598,
+          secType: 'STK',
+          exchange: 'SMART',
+          action: 'BUY',
+          orderType: 'LMT',
+          quantity: 0.5,
+          price: 160,
+        });
+
+        await expect(preview).rejects.toThrow("U12345 doesn't have permission to trade fractional shares");
+        await expect(preview).rejects.not.toThrow('Authentication required');
+      });
+
       it('should include stopPrice for stop orders', async () => {
         mockFetch
           .mockResolvedValueOnce(mockResponse([{ conid: 265598, symbol: 'AAPL' }]))

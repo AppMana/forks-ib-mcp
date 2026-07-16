@@ -1,4 +1,4 @@
-import { HttpError } from "../http.js";
+import { getErrorMessage, HttpError } from "../http.js";
 
 export const IBKR_SECURITY_TYPES = [
   "STK",
@@ -171,7 +171,7 @@ export class SymbolNotFoundError extends Error {
 export function isAuthenticationError(error: unknown): boolean {
   if (!error) return false;
 
-  const message = error instanceof Error ? error.message : String(error);
+  const message = getErrorMessage(error).toLowerCase();
   if (
     message.includes("authentication") ||
     message.includes("authenticate") ||
@@ -182,14 +182,14 @@ export function isAuthenticationError(error: unknown): boolean {
 
   if (error instanceof HttpError) {
     const { status, data } = error.response;
-    if (status === 401 || status === 403 || status === 500) return true;
+    if (status === 401 || status === 403) return true;
     if (typeof data === "object" && data !== null) {
       const obj = data as Record<string, unknown>;
       if (obj.error === "not authenticated") return true;
-      if (typeof obj.error === "string" && status === 500 && obj.error.includes("authentication")) return true;
+      if (typeof obj.error === "string" && obj.error.toLowerCase().includes("authentication")) return true;
       if (typeof obj.error === "object" && obj.error !== null) {
         const nested = (obj.error as Record<string, unknown>).message;
-        if (typeof nested === "string" && (nested.includes("not authenticated") || nested.includes("authentication"))) return true;
+        if (typeof nested === "string" && /not authenticated|authentication/i.test(nested)) return true;
       }
     }
   }

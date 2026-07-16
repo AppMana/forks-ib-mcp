@@ -1,4 +1,5 @@
 import { Logger } from "../logger.js";
+import { getErrorMessage } from "../http.js";
 import type { IBClientRequester } from "./accounts.js";
 import { searchContracts, pickContract } from "./market-data.js";
 import {
@@ -196,7 +197,7 @@ export async function getOptionChain(
       );
     }
     if (error instanceof SymbolNotFoundError) throw error;
-    throw new Error(`Failed to get option chain for ${symbol}`);
+    throw new Error(`Failed to get option chain for ${symbol}: ${getErrorMessage(error)}`, { cause: error });
   }
 }
 
@@ -234,6 +235,9 @@ export async function resolveOptionConid(
       );
     }
     if (error instanceof SymbolNotFoundError) throw error;
-    throw new Error(`Failed to resolve option conid for ${symbol} ${expiry} ${strike} ${right}`);
+    throw new Error(
+      `Failed to resolve option conid for ${symbol} ${expiry} ${strike} ${right}: ${getErrorMessage(error)}`,
+      { cause: error },
+    );
   }
 }

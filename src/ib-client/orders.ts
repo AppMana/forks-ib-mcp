@@ -1,4 +1,5 @@
 import { Logger } from "../logger.js";
+import { getErrorMessage } from "../http.js";
 import type { IBClientRequester } from "./accounts.js";
 import { resolveContract } from "./options.js";
 import { searchContracts } from "./market-data.js";
@@ -431,7 +432,7 @@ export async function confirmOrder(client: IBClientRequester, replyId: string, m
     if (isAuthenticationError(error)) {
       throw new AuthenticationError("Authentication required to confirm orders. Please authenticate with Interactive Brokers first.");
     }
-    throw new Error("Failed to confirm order: " + (error instanceof Error ? error.message : String(error)));
+    throw new Error(`Failed to confirm order: ${getErrorMessage(error)}`, { cause: error });
   }
 }
 
@@ -468,7 +469,7 @@ export async function getOrderStatus(
     if (isAuthenticationError(error)) {
       throw new AuthenticationError(`Authentication required to get order status for order ${orderId}. Please authenticate with Interactive Brokers first.`);
     }
-    throw new Error(`Failed to get status for order ${orderId}`);
+    throw new Error(`Failed to get status for order ${orderId}: ${getErrorMessage(error)}`, { cause: error });
   }
 }
 
@@ -513,7 +514,10 @@ export async function getTrades(
         `Authentication required to retrieve trades for account ${accountId}. Please authenticate with Interactive Brokers first.`,
       );
     }
-    throw new Error(`Failed to retrieve trades for account ${accountId}`);
+    throw new Error(
+      `Failed to retrieve trades for account ${accountId}: ${getErrorMessage(error)}`,
+      { cause: error },
+    );
   }
 }
 
@@ -545,6 +549,6 @@ export async function getOrders(client: IBClientRequester, accountId?: string): 
     if (isAuthenticationError(error)) {
       throw new AuthenticationError("Authentication required to retrieve orders. Please authenticate with Interactive Brokers first.");
     }
-    throw new Error("Failed to retrieve orders");
+    throw new Error(`Failed to retrieve orders: ${getErrorMessage(error)}`, { cause: error });
   }
 }

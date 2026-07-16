@@ -26,6 +26,28 @@ export interface HttpResponse<T = unknown> {
   statusText: string;
 }
 
+function extractErrorText(value: unknown): string | undefined {
+  if (typeof value === "string") return value.trim() || undefined;
+  if (Array.isArray(value)) {
+    const messages = value.map(extractErrorText).filter((message): message is string => Boolean(message));
+    return messages.length > 0 ? messages.join("; ") : undefined;
+  }
+  if (typeof value !== "object" || value === null) return undefined;
+
+  const object = value as Record<string, unknown>;
+  for (const key of ["error", "message", "detail", "description", "reason", "title"]) {
+    const message = extractErrorText(object[key]);
+    if (message) return message;
+  }
+
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized !== "{}" ? serialized : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export class HttpError extends Error {
   response: { status: number; statusText: string; data: unknown };
   config: { url?: string; method?: string };
@@ -35,11 +57,29 @@ export class HttpError extends Error {
     response: { status: number; statusText: string; data: unknown },
     config: { url?: string; method?: string } = {},
   ) {
-    super(message);
+    const responseMessage = extractErrorText(response.data);
+    super(responseMessage ? `${message}: ${responseMessage}` : message);
     this.name = "HttpError";
     this.response = response;
     this.config = config;
   }
+}
+
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof HttpError) {
+    return extractErrorText(error.response.data) ?? error.message;
+  }
+  if (error instanceof Error) {
+    const cause = (error as Error & { cause?: unknown }).cause;
+    if (cause !== undefined) {
+      const causeMessage = getErrorMessage(cause);
+      if (causeMessage && !error.message.includes(causeMessage)) {
+        return `${error.message}: ${causeMessage}`;
+      }
+    }
+    return error.message;
+  }
+  return extractErrorText(error) ?? String(error);
 }
 
 export function isHttpError(error: unknown): error is HttpError {

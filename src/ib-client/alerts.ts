@@ -1,4 +1,5 @@
 import { Logger } from "../logger.js";
+import { getErrorMessage } from "../http.js";
 import type { IBClientRequester } from "./accounts.js";
 import { AuthenticationError, isAuthenticationError } from "./types.js";
 
@@ -13,7 +14,7 @@ export async function getAlerts(client: IBClientRequester, accountId: string): P
     if (isAuthenticationError(error)) {
       throw new AuthenticationError("Authentication required to get alerts. Please authenticate with Interactive Brokers first.");
     }
-    throw new Error("Failed to get alerts: " + (error instanceof Error ? error.message : String(error)));
+    throw new Error(`Failed to get alerts: ${getErrorMessage(error)}`, { cause: error });
   }
 }
 
@@ -28,7 +29,7 @@ export async function createAlert(client: IBClientRequester, accountId: string, 
     if (isAuthenticationError(error)) {
       throw new AuthenticationError("Authentication required to create alerts. Please authenticate with Interactive Brokers first.");
     }
-    throw new Error("Failed to create alert: " + (error instanceof Error ? error.message : String(error)));
+    throw new Error(`Failed to create alert: ${getErrorMessage(error)}`, { cause: error });
   }
 }
 
@@ -43,7 +44,7 @@ export async function activateAlert(client: IBClientRequester, accountId: string
     if (isAuthenticationError(error)) {
       throw new AuthenticationError("Authentication required to activate alerts. Please authenticate with Interactive Brokers first.");
     }
-    throw new Error("Failed to activate alert: " + (error instanceof Error ? error.message : String(error)));
+    throw new Error(`Failed to activate alert: ${getErrorMessage(error)}`, { cause: error });
   }
 }
 
@@ -58,6 +59,6 @@ export async function deleteAlert(client: IBClientRequester, accountId: string, 
     if (isAuthenticationError(error)) {
       throw new AuthenticationError("Authentication required to delete alerts. Please authenticate with Interactive Brokers first.");
     }
-    throw new Error("Failed to delete alert: " + (error instanceof Error ? error.message : String(error)));
+    throw new Error(`Failed to delete alert: ${getErrorMessage(error)}`, { cause: error });
   }
 }

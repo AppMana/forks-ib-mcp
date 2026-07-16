@@ -1,4 +1,5 @@
 import { Logger } from "../logger.js";
+import { getErrorMessage } from "../http.js";
 import type { IBClientRequester } from "./accounts.js";
 import {
   type ContractSearch,
@@ -72,7 +73,7 @@ export async function getMarketData(
       throw new AuthenticationError(`Authentication required to retrieve market data for ${symbol}. Please authenticate with Interactive Brokers first.`);
     }
     if (error instanceof SymbolNotFoundError) throw error;
-    throw new Error(`Failed to retrieve market data for ${symbol}`);
+    throw new Error(`Failed to retrieve market data for ${symbol}: ${getErrorMessage(error)}`, { cause: error });
   }
 }
 
