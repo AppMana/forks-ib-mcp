@@ -97,6 +97,7 @@ export interface OrderConfirmation {
 }
 
 export interface OrderPayload {
+  acctId: string;
   conid?: number;
   conidex?: string;
   orderType: string;
@@ -108,11 +109,13 @@ export interface OrderPayload {
   listingExchange?: string;
   price?: number;
   auxPrice?: number;
+  taxOptimizerId?: string;
 }
 
 export interface AccountEntry {
   id?: string;
   accountId?: string;
+  [key: string]: unknown;
 }
 
 export interface IBClientConfig {
@@ -141,6 +144,8 @@ export interface OrderRequest extends ContractLookupRequest {
   fullPosition?: boolean;
   price?: number;
   stopPrice?: number;
+  taxOptimizerId?: string;
+  validatePosition?: boolean;
   suppressConfirmations?: boolean;
   tif?: "DAY" | "GTC" | "IOC" | "OPG";
 }

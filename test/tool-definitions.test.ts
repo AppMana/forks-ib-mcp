@@ -11,6 +11,8 @@ import {
   CancelOrderZodSchema,
   GetTradesZodSchema,
   GetAccountLedgerZodSchema,
+  GetTaxRulesZodSchema,
+  AnalyzeTaxTradeZodSchema,
   ConfirmOrderZodSchema,
   CreateAlertZodSchema,
   ActivateAlertZodSchema,
@@ -457,6 +459,45 @@ describe('Tool Definitions - Zod Schemas', () => {
         expect(result.error.issues.map((issue) => String(issue.path[0])))
           .toEqual(expect.arrayContaining(paths));
       }
+    });
+  });
+
+  describe('tax analysis schemas', () => {
+    it('accepts buy-side wash-sale analysis and normalizes related conids', () => {
+      const result = AnalyzeTaxTradeZodSchema.safeParse({
+        accountId: 'U12345',
+        action: 'BUY',
+        conid: '265598',
+        quantity: 10,
+        relatedConids: ['756733'],
+        tradeDate: '2026-07-29',
+        jurisdiction: 'US',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toMatchObject({
+          conid: 265598,
+          relatedConids: [756733],
+          lotMethod: 'FIFO',
+          days: 3650,
+        });
+      }
+    });
+
+    it('rejects impossible trade-date formats and non-positive quantities', () => {
+      expect(AnalyzeTaxTradeZodSchema.safeParse({
+        accountId: 'U12345',
+        action: 'BUY',
+        conid: 265598,
+        quantity: 0,
+        tradeDate: '07/29/2026',
+      }).success).toBe(false);
+    });
+
+    it('allows rule retrieval without an account and defaults to automatic jurisdiction', () => {
+      const result = GetTaxRulesZodSchema.safeParse({});
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.jurisdiction).toBe('AUTO');
     });
   });
 

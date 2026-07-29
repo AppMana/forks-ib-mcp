@@ -70,6 +70,8 @@ export const PlaceOrderZodShape = {
   fullPosition: z.boolean().optional(),
   price: z.number().optional(),
   stopPrice: z.number().optional(),
+  taxOptimizerId: z.string().trim().min(1).optional(),
+  validatePosition: z.boolean().optional(),
   suppressConfirmations: z.boolean().optional(),
   exchange: z.string().optional(),
   tif: z.enum(["DAY", "GTC", "IOC", "OPG"]).optional()
@@ -92,6 +94,40 @@ export const GetTradesZodShape = {
 
 export const GetAccountLedgerZodShape = {
   accountId: z.string(),
+};
+
+export const GetTransactionHistoryZodShape = {
+  accountId: z.string(),
+  conid: ConidZod,
+  currency: z.string().length(3).optional().default("USD"),
+  days: z.number().int().min(1).max(3650).optional().default(365),
+};
+
+const TaxJurisdictionZod = z.enum(["AUTO", "US"]);
+const TradeDateZod = z.string().regex(
+  /^\d{4}-\d{2}-\d{2}$/,
+  "tradeDate must use YYYY-MM-DD",
+);
+
+export const GetTaxRulesZodShape = {
+  accountId: z.string().optional(),
+  jurisdiction: TaxJurisdictionZod.optional().default("AUTO"),
+};
+
+export const AnalyzeTaxTradeZodShape = {
+  accountId: z.string(),
+  action: z.enum(["BUY", "SELL"]),
+  conid: ConidZod,
+  quantity: z.number().positive(),
+  unitPrice: z.number().positive().optional(),
+  tradeDate: TradeDateZod.optional(),
+  jurisdiction: TaxJurisdictionZod.optional().default("AUTO"),
+  relatedConids: z.array(ConidZod).max(20).optional().default([]),
+  relatedAccountIds: z.array(z.string()).max(50).optional().default([]),
+  lotMethod: z.enum(["FIFO", "LONG_TERM_FIRST"]).optional().default("FIFO"),
+  currency: z.string().length(3).optional().default("USD"),
+  days: z.number().int().min(1).max(3650).optional().default(3650),
+  includeRaw: z.boolean().optional().default(false),
 };
 
 export const GetLiveOrdersZodShape = {
@@ -300,6 +336,9 @@ export const GetOrderStatusZodSchema = z.object(GetOrderStatusZodShape);
 export const CancelOrderZodSchema = z.object(CancelOrderZodShape);
 export const GetTradesZodSchema = z.object(GetTradesZodShape);
 export const GetAccountLedgerZodSchema = z.object(GetAccountLedgerZodShape);
+export const GetTransactionHistoryZodSchema = z.object(GetTransactionHistoryZodShape);
+export const GetTaxRulesZodSchema = z.object(GetTaxRulesZodShape);
+export const AnalyzeTaxTradeZodSchema = z.object(AnalyzeTaxTradeZodShape);
 export const GetLiveOrdersZodSchema = z.object(GetLiveOrdersZodShape);
 export const ConfirmOrderZodSchema = z.object(ConfirmOrderZodShape);
 export const GetAlertsZodSchema = z.object(GetAlertsZodShape);
@@ -323,6 +362,9 @@ export type GetOrderStatusInput = z.infer<typeof GetOrderStatusZodSchema>;
 export type CancelOrderInput = z.infer<typeof CancelOrderZodSchema>;
 export type GetTradesInput = z.infer<typeof GetTradesZodSchema>;
 export type GetAccountLedgerInput = z.infer<typeof GetAccountLedgerZodSchema>;
+export type GetTransactionHistoryInput = z.infer<typeof GetTransactionHistoryZodSchema>;
+export type GetTaxRulesInput = z.infer<typeof GetTaxRulesZodSchema>;
+export type AnalyzeTaxTradeInput = z.infer<typeof AnalyzeTaxTradeZodSchema>;
 export type GetLiveOrdersInput = z.infer<typeof GetLiveOrdersZodSchema>;
 export type ConfirmOrderInput = z.infer<typeof ConfirmOrderZodSchema>;
 export type GetAlertsInput = z.infer<typeof GetAlertsZodSchema>;

@@ -21,6 +21,9 @@ import {
   CancelOrderInput,
   GetTradesInput,
   GetAccountLedgerInput,
+  GetTransactionHistoryInput,
+  GetTaxRulesInput,
+  AnalyzeTaxTradeInput,
   GetLiveOrdersInput,
   ConfirmOrderInput,
   GetAlertsInput,
@@ -31,6 +34,17 @@ import {
   ListFlexQueriesInput,
   ForgetFlexQueryInput,
 } from "./tool-definitions.js";
+import type { AccountEntry } from "./ib-client/types.js";
+import {
+  analyzeProposedBuy,
+  analyzeProposedSale,
+  type TaxAccountKind,
+} from "./tax/analyze.js";
+import { reconstructTransactionHistory } from "./tax/transaction-history.js";
+import {
+  parseDateOnly,
+  US_IRS_INVESTMENT_RULES_2025,
+} from "./tax/us-irs.js";
 
 export interface ToolHandlerContext {
   ibClient: IBClient;
@@ -67,6 +81,82 @@ const DEFAULT_AUTH_POLL_SECONDS = 5;
  * this ceiling a broken login drives a fresh browser session on every tool call.
  */
 const MAX_FAILED_LOGINS = 5;
+
+function accountIdFromEntry(account: AccountEntry): string | undefined {
+  return account.id?.trim() || account.accountId?.trim() || undefined;
+}
+
+function accountKindFromEntry(account: AccountEntry | undefined): TaxAccountKind {
+  if (!account) return "UNKNOWN";
+  const description = [
+    account.type,
+    account.accountType,
+    account.accountDesc,
+    account.accountTitle,
+    account.accountAlias,
+    account.accountName,
+    account.displayName,
+    account.desc,
+  ].filter((value): value is string => typeof value === "string").join(" ").toUpperCase();
+  if (description.includes("ROTH") && description.includes("IRA")) return "ROTH_IRA";
+  if (description.includes("IRA")) return "IRA";
+  if (description.includes("INDIVIDUAL") || description.includes("MARGIN") || description.includes("CASH")) {
+    return "TAXABLE";
+  }
+  return "UNKNOWN";
+}
+
+function usAccountEvidence(account: AccountEntry | undefined): {
+  status: "CONFIRMED" | "BROKER_ENTITY_ONLY" | "NONE";
+  evidence: string[];
+} {
+  if (!account) return { status: "NONE", evidence: [] };
+  const evidence: string[] = [];
+  const countryKeys = ["taxCountry", "taxResidenceCountry", "country", "countryCode"];
+  for (const key of countryKeys) {
+    const value = account[key];
+    if (typeof value === "string" && /^(US|USA|UNITED STATES)$/i.test(value.trim())) {
+      evidence.push(`${key}=${value}`);
+    }
+  }
+  if (evidence.length > 0) return { status: "CONFIRMED", evidence };
+
+  const ibEntity = account.ibEntity;
+  if (typeof ibEntity === "string" && /(?:^|[-_\s])US$/i.test(ibEntity.trim())) {
+    return {
+      status: "BROKER_ENTITY_ONLY",
+      evidence: [`ibEntity=${ibEntity}`],
+    };
+  }
+  return { status: "NONE", evidence: [] };
+}
+
+function easternTradeDate(): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function positionForConid(data: unknown, conid: number): number | undefined {
+  const candidates = Array.isArray(data)
+    ? data
+    : typeof data === "object" && data !== null
+      && Array.isArray((data as Record<string, unknown>).positions)
+      ? (data as Record<string, unknown>).positions as unknown[]
+      : [];
+  const values = candidates
+    .filter((entry): entry is Record<string, unknown> =>
+      typeof entry === "object" && entry !== null && Number(entry.conid) === conid
+    )
+    .map((entry) => Number(entry.position))
+    .filter(Number.isFinite);
+  return values.length > 0 ? values.reduce((total, value) => total + value, 0) : undefined;
+}
 
 export class ToolHandlers {
   private context: ToolHandlerContext;
@@ -733,6 +823,8 @@ export class ToolHandlers {
         fullPosition: input.fullPosition,
         price: input.price,
         stopPrice: input.stopPrice,
+        taxOptimizerId: input.taxOptimizerId,
+        validatePosition: input.validatePosition,
         suppressConfirmations: input.suppressConfirmations,
         exchange: input.exchange,
         tif: input.tif,
@@ -813,6 +905,212 @@ export class ToolHandlers {
     if (!auth.ok) return auth.result;
     try {
       return this.jsonResult(await this.context.ibClient.getAccountLedger(input.accountId));
+    } catch (error) {
+      return this.textResult(this.formatError(error));
+    }
+  }
+
+  async getTransactionHistory(input: GetTransactionHistoryInput): Promise<ToolHandlerResult> {
+    const auth = await this.ensureAuth();
+    if (!auth.ok) return auth.result;
+    try {
+      return this.jsonResult(
+        await this.context.ibClient.getTransactionHistory(
+          input.accountId,
+          input.conid,
+          input.currency,
+          input.days,
+        ),
+      );
+    } catch (error) {
+      return this.textResult(this.formatError(error));
+    }
+  }
+
+  async getTaxRules(input: GetTaxRulesInput): Promise<ToolHandlerResult> {
+    let account: AccountEntry | undefined;
+    if (input.accountId) {
+      const auth = await this.ensureAuth();
+      if (!auth.ok) return auth.result;
+      try {
+        account = (await this.context.ibClient.getPortfolioAccounts())
+          .find((entry) => accountIdFromEntry(entry) === input.accountId);
+      } catch (error) {
+        return this.textResult(this.formatError(error));
+      }
+      if (!account) return this.textResult(`Account ${input.accountId} is not accessible`);
+    }
+
+    const evidence = usAccountEvidence(account);
+    const applicability = input.jurisdiction === "US"
+      ? "CALLER_CONFIRMED_US"
+      : evidence.status === "CONFIRMED"
+        ? "ACCOUNT_METADATA_CONFIRMS_US"
+        : evidence.status === "BROKER_ENTITY_ONLY"
+          ? "NEEDS_TAX_RESIDENCY_CONFIRMATION"
+          : input.accountId ? "NEEDS_TAX_RESIDENCY_CONFIRMATION" : "JURISDICTION_NOT_SELECTED";
+    return this.jsonResult({
+      ruleSet: US_IRS_INVESTMENT_RULES_2025,
+      applicability,
+      accountId: input.accountId,
+      accountEvidence: evidence,
+      caveat: evidence.status === "BROKER_ENTITY_ONLY"
+        ? "IBLLC-US identifies the broker entity, not necessarily the account owner's tax residence."
+        : undefined,
+    });
+  }
+
+  async analyzeTaxTrade(input: AnalyzeTaxTradeInput): Promise<ToolHandlerResult> {
+    const auth = await this.ensureAuth();
+    if (!auth.ok) return auth.result;
+    try {
+      const accounts = await this.context.ibClient.getPortfolioAccounts();
+      const accountsById = new Map(
+        accounts
+          .map((account) => [accountIdFromEntry(account), account] as const)
+          .filter((entry): entry is [string, AccountEntry] => Boolean(entry[0])),
+      );
+      const accountIds = [...new Set([input.accountId, ...input.relatedAccountIds])];
+      const inaccessible = accountIds.filter((accountId) => !accountsById.has(accountId));
+      if (inaccessible.length > 0) {
+        throw new Error(`Accounts are not accessible: ${inaccessible.join(", ")}`);
+      }
+
+      const targetAccount = accountsById.get(input.accountId);
+      const evidence = usAccountEvidence(targetAccount);
+      const applicability = input.jurisdiction === "US"
+        ? "CALLER_CONFIRMED_US"
+        : evidence.status === "CONFIRMED"
+          ? "ACCOUNT_METADATA_CONFIRMS_US"
+          : "NEEDS_TAX_RESIDENCY_CONFIRMATION";
+      const conids = [...new Set([input.conid, ...input.relatedConids])];
+      const rawByConid = new Map<number, unknown>();
+      const historyWarnings: string[] = [];
+      for (const conid of conids) {
+        try {
+          rawByConid.set(
+            conid,
+            await this.context.ibClient.getTransactionHistoryForAccounts(
+              accountIds,
+              conid,
+              input.currency,
+              input.days,
+            ),
+          );
+        } catch (error) {
+          if (conid === input.conid) throw error;
+          historyWarnings.push(
+            `Could not retrieve related conid ${conid}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
+      const reconstructions = [...rawByConid.entries()].flatMap(([conid, raw]) =>
+        accountIds.map((accountId) =>
+          reconstructTransactionHistory(
+            raw,
+            accountId,
+            conid,
+            accountKindFromEntry(accountsById.get(accountId)),
+          )
+        )
+      );
+      const target = reconstructions.find(
+        (reconstruction) =>
+          reconstruction.accountId === input.accountId && reconstruction.conid === input.conid,
+      );
+      if (!target) throw new Error("Target transaction history was not reconstructed");
+
+      const acquisitions = reconstructions.flatMap((item) => item.acquisitions);
+      const dispositions = reconstructions.flatMap((item) => item.dispositions);
+      const reconstructionWarnings = reconstructions.flatMap((item) =>
+        item.warnings.map((warning) => `${item.accountId}/${item.conid}: ${warning}`)
+      );
+      const tradeDate = parseDateOnly(input.tradeDate ?? easternTradeDate());
+      const substantiallyIdenticalConids = new Set(conids);
+      const common = {
+        ruleSet: US_IRS_INVESTMENT_RULES_2025,
+        applicability,
+        accountEvidence: evidence,
+        identityAssumption: {
+          conids,
+          status: input.relatedConids.length > 0
+            ? "CALLER_DECLARED_SUBSTANTIALLY_IDENTICAL"
+            : "SAME_CONTRACT_ONLY",
+          caveat: "The IRS substantially-identical test is facts-and-circumstances. IBKR contract IDs do not decide that legal question.",
+        },
+        evidence: {
+          source: "IBKR /pa/transactions",
+          requestedDays: input.days,
+          accountIds,
+          authoritativeTaxLots: false,
+          warnings: [...historyWarnings, ...reconstructionWarnings],
+          limitations: [
+            "PortfolioAnalyst transactions are reconstructed with FIFO and are not IBKR's authoritative open tax lots.",
+            "Transfers, corporate actions, inherited basis, broker basis adjustments, and historical wash-sale basis changes require an authoritative tax-lot/Flex report.",
+            "Future purchases through day +30 cannot be known at analysis time and remain an open wash-sale risk.",
+          ],
+          raw: input.includeRaw
+            ? Object.fromEntries([...rawByConid.entries()].map(([conid, raw]) => [String(conid), raw]))
+            : undefined,
+        },
+      };
+
+      if (input.action === "BUY") {
+        const analysis = analyzeProposedBuy({
+          accountId: input.accountId,
+          accountKind: accountKindFromEntry(targetAccount),
+          conid: input.conid,
+          quantity: input.quantity,
+          tradeDate,
+          dispositions,
+          acquisitions,
+          substantiallyIdenticalConids,
+        });
+        return this.jsonResult({
+          ...common,
+          confidence: common.evidence.warnings.length === 0
+            ? "RECONSTRUCTED_NOT_AUTHORITATIVE"
+            : "UNVERIFIED",
+          analysis,
+        });
+      }
+
+      if (input.unitPrice === undefined) {
+        throw new Error("unitPrice is required for SELL tax analysis");
+      }
+      const positions = await this.context.ibClient.getPositions(input.accountId);
+      const livePosition = positionForConid(positions, input.conid);
+      const reconstructedPosition = target.openLots.reduce(
+        (total, lot) => total + lot.remainingQuantity,
+        0,
+      );
+      const positionReconciles = livePosition !== undefined
+        && Math.abs(livePosition - reconstructedPosition) < 0.000001;
+      const analysis = analyzeProposedSale({
+        accountId: input.accountId,
+        conid: input.conid,
+        quantity: input.quantity,
+        unitProceeds: input.unitPrice,
+        tradeDate,
+        openLots: target.openLots,
+        acquisitions,
+        dispositions,
+        substantiallyIdenticalConids,
+        lotMethod: input.lotMethod,
+      });
+      return this.jsonResult({
+        ...common,
+        confidence: positionReconciles && common.evidence.warnings.length === 0
+          ? "RECONSTRUCTED_RECONCILED_NOT_AUTHORITATIVE"
+          : "UNVERIFIED",
+        positionReconciliation: {
+          livePosition,
+          reconstructedPosition,
+          reconciles: positionReconciles,
+        },
+        analysis,
+      });
     } catch (error) {
       return this.textResult(this.formatError(error));
     }

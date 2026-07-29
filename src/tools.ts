@@ -21,6 +21,9 @@ import {
   GetOrderStatusZodShape,
   GetTradesZodShape,
   GetAccountLedgerZodShape,
+  GetTransactionHistoryZodShape,
+  GetTaxRulesZodShape,
+  AnalyzeTaxTradeZodShape,
   GetPositionsZodShape,
   ListFlexQueriesZodShape,
   PlaceOrderZodShape,
@@ -94,14 +97,14 @@ export function registerTools(
 
   registerTool(
     "get_contract_details",
-    "Get IBKR security definitions for one or more contract IDs. Returns identity and classification metadata without relying on ticker matching. Usage: `{ \"conids\": [265598, 4815747] }`.",
+    "Get IBKR security definitions for one or more contract IDs. Returns identity and classification metadata without relying on ticker matching. Usage: `{ \"conids\": [265598, 141432825] }`.",
     GetContractDetailsZodShape,
     async (args) => await handlers.getContractDetails(args),
   );
 
   registerTool(
     "get_contract_rules",
-    "Get IBKR trading rules and permitted account IDs for a contract and side. This is read-only and does not place an order. Usage: `{ \"conid\": 4815747, \"side\": \"SELL\", \"exchange\": \"FUNDSERV\" }`.",
+    "Get IBKR trading rules and permitted account IDs for a contract and side. This is read-only and does not place an order. For FUNDSERV contracts, omit exchange because IBKR can reject the redundant routing field. Usage: `{ \"conid\": 141432825, \"side\": \"SELL\" }`.",
     GetContractRulesZodShape,
     async (args) => await handlers.getContractRules(args),
   );
@@ -115,7 +118,8 @@ export function registerTools(
         "- Preview full mutual-fund sale: `{ \"mode\":\"PREVIEW\",\"accountId\":\"abc\",\"conid\":123456789,\"secType\":\"FUND\",\"exchange\":\"FUNDSERV\",\"action\":\"SELL\",\"orderType\":\"MKT\",\"fullPosition\":true }`\n" +
         "- Submit full mutual-fund sale: use the identical input with `mode` set to `SUBMIT`.\n" +
         "- Crypto market buy: use `secType:\"CRYPTO\"`, an exchange-qualified `conidex`, `cashQuantity`, and `tif:\"IOC\"`.\n" +
-        "- Combo: use `secType:\"BAG\"` and the complete IBKR spread composition in `conidex`.",
+        "- Combo: use `secType:\"BAG\"` and the complete IBKR spread composition in `conidex`.\n" +
+        "- Tax-lot-aware sale: include an IBKR-provided `taxOptimizerId`; it is passed unchanged to preview and submit. Set `validatePosition:true` to cross-check the sale quantity against `/portfolio` before either request.",
       PlaceOrderZodShape,
       async (args) => await handlers.placeOrder(args),
     );
@@ -149,6 +153,27 @@ export function registerTools(
     "Get account cash balances by currency, including settledCash. Usage: `{ \"accountId\": \"U12345\" }`.",
     GetAccountLedgerZodShape,
     async (args) => await handlers.getAccountLedger(args),
+  );
+
+  registerTool(
+    "get_transaction_history",
+    "Get PortfolioAnalyst buy, sell, dividend, and transfer history for one account and contract. This can identify acquisition activity but is not a substitute for IBKR's open-tax-lot report. Usage: `{ \"accountId\":\"U12345\", \"conid\":756733, \"days\":3650 }`.",
+    GetTransactionHistoryZodShape,
+    async (args) => await handlers.getTransactionHistory(args),
+  );
+
+  registerTool(
+    "get_tax_rules",
+    "Return the versioned IRS investment-tax rules used internally, with account-jurisdiction evidence when accountId is supplied. Broker entity alone is not treated as proof of US tax residency. Usage: `{ \"accountId\":\"U12345\", \"jurisdiction\":\"AUTO\" }`.",
+    GetTaxRulesZodShape,
+    async (args) => await handlers.getTaxRules(args),
+  );
+
+  registerTool(
+    "analyze_tax_trade",
+    "Estimate US holding period, capital gain character, and wash-sale effects from IBKR PortfolioAnalyst transactions without placing an order. BUY analysis warns about prior loss sales and estimates affected shares/loss. SELL analysis reconstructs FIFO or long-term-first lots and reports the open 30-day future wash window. relatedConids must only contain contracts the caller has determined are substantially identical; relatedAccountIds must only contain the same taxpayer's, spouse's, or relevant IRA accounts. Transaction reconstruction is not an authoritative IBKR tax-lot report. Usage: `{ \"accountId\":\"U12345\", \"action\":\"BUY\", \"conid\":756733, \"quantity\":10, \"jurisdiction\":\"US\" }`.",
+    AnalyzeTaxTradeZodShape,
+    async (args) => await handlers.analyzeTaxTrade(args),
   );
 
   registerTool(

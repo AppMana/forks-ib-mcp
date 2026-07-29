@@ -11,7 +11,13 @@ import {
   type RequestOptions,
 } from "./http.js";
 
-import { getAccountInfo, getAccountLedger, getPositions } from "./ib-client/accounts.js";
+import {
+  getAccountInfo,
+  getAccountLedger,
+  getPortfolioAccounts,
+  getPositions,
+  getTransactionHistory,
+} from "./ib-client/accounts.js";
 import { getContractDetails, getContractRules, getMarketData } from "./ib-client/market-data.js";
 import { getOptionChain, resolveOptionConid } from "./ib-client/options.js";
 import { cancelOrder, order, placeOrder, confirmOrder, getOrderStatus, getOrders, getTrades } from "./ib-client/orders.js";
@@ -500,6 +506,10 @@ export class IBClient {
     return getAccountInfo(this);
   }
 
+  async getPortfolioAccounts(): Promise<import("./ib-client/types.js").AccountEntry[]> {
+    return getPortfolioAccounts(this);
+  }
+
   async getPositions(accountId?: string): Promise<unknown> {
     return getPositions(this, accountId);
   }
@@ -571,6 +581,24 @@ export class IBClient {
 
   async getTrades(accountId: string, days?: number): Promise<unknown> {
     return getTrades(this, accountId, days);
+  }
+
+  async getTransactionHistory(
+    accountId: string,
+    conid: number,
+    currency?: string,
+    days?: number,
+  ): Promise<unknown> {
+    return getTransactionHistory(this, [accountId], conid, currency, days);
+  }
+
+  async getTransactionHistoryForAccounts(
+    accountIds: string[],
+    conid: number,
+    currency?: string,
+    days?: number,
+  ): Promise<unknown> {
+    return getTransactionHistory(this, accountIds, conid, currency, days);
   }
 
   async getOrders(accountId?: string): Promise<unknown> {

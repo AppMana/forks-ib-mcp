@@ -231,15 +231,7 @@ async function resolveFullPositionQuantity(
   conid: number,
   action: "BUY" | "SELL",
 ): Promise<number> {
-  const response = await client.request(
-    "GET",
-    `/portfolio/${accountId}/position/${conid}`,
-  );
-  const positions = positionEntries(response.data)
-    .filter((entry) => Number(entry.conid) === conid)
-    .map((entry) => Number(entry.position))
-    .filter(Number.isFinite);
-  const position = positions.reduce((total, value) => total + value, 0);
+  const position = await getPortfolioPosition(client, accountId, conid);
 
   if (position === 0) {
     throw new Error(`No open position found for conid ${conid} in account ${accountId}`);
@@ -254,9 +246,23 @@ async function resolveFullPositionQuantity(
   return Math.abs(position);
 }
 
+async function getPortfolioPosition(
+  client: IBClientRequester,
+  accountId: string,
+  conid: number,
+): Promise<number> {
+  const response = await client.request("GET", `/portfolio/${accountId}/position/${conid}`);
+  const positions = positionEntries(response.data)
+    .filter((entry) => Number(entry.conid) === conid)
+    .map((entry) => Number(entry.position))
+    .filter(Number.isFinite);
+  return positions.reduce((total, value) => total + value, 0);
+}
+
 interface BuiltOrderPayload {
   payload: OrderPayload;
   referenceConid?: number;
+  positionQuantity?: number;
 }
 
 async function buildOrderPayload(
@@ -314,6 +320,7 @@ async function buildOrderPayload(
   }
 
   const orderPayload: OrderPayload = {
+    acctId: orderRequest.accountId,
     orderType: orderRequest.orderType,
     side: orderRequest.action,
     tif: orderRequest.tif || "DAY",
@@ -353,8 +360,15 @@ async function buildOrderPayload(
   if (orderRequest.orderType === "STP" && orderRequest.stopPrice !== undefined) {
     orderPayload.auxPrice = Number(orderRequest.stopPrice);
   }
+  if (orderRequest.taxOptimizerId) {
+    orderPayload.taxOptimizerId = orderRequest.taxOptimizerId;
+  }
 
-  return { payload: orderPayload, referenceConid };
+  return {
+    payload: orderPayload,
+    referenceConid,
+    positionQuantity: quantity,
+  };
 }
 
 export async function order(client: IBClientRequester, orderRequest: OrderRequest): Promise<unknown> {
@@ -365,9 +379,29 @@ export async function order(client: IBClientRequester, orderRequest: OrderReques
     const endpoint = orderRequest.mode === "PREVIEW"
       ? `/iserver/account/${orderRequest.accountId}/orders/whatif`
       : `/iserver/account/${orderRequest.accountId}/orders`;
+    if (orderRequest.validatePosition && builtOrder.referenceConid === undefined) {
+      throw new Error("Position validation requires a numeric contract ID");
+    }
+    if (orderRequest.validatePosition && builtOrder.positionQuantity === undefined) {
+      throw new Error("Position validation requires a share or contract quantity");
+    }
+    const portfolioPosition = orderRequest.validatePosition
+      ? await getPortfolioPosition(client, orderRequest.accountId, builtOrder.referenceConid!)
+      : undefined;
+    if (
+      orderRequest.validatePosition
+      && orderRequest.action === "SELL"
+      && (
+        portfolioPosition === undefined
+        || portfolioPosition < builtOrder.positionQuantity!
+      )
+    ) {
+      throw new Error(
+        `Position validation failed for account ${orderRequest.accountId}, conid ${builtOrder.referenceConid}: requested SELL ${builtOrder.positionQuantity}, portfolio position ${portfolioPosition ?? "unavailable"}`,
+      );
+    }
 
-    const marketData = orderRequest.mode === "PREVIEW"
-      && builtOrder.referenceConid !== undefined
+    const marketData = orderRequest.mode === "PREVIEW" && builtOrder.referenceConid !== undefined
       ? await warmMarketDataSnapshot(client, builtOrder.referenceConid)
       : undefined;
 
@@ -391,8 +425,14 @@ export async function order(client: IBClientRequester, orderRequest: OrderReques
       && response.data !== null
       && !Array.isArray(response.data)
     ) {
+      const previewResponse = response.data as Record<string, unknown>;
+      const previewPosition = typeof previewResponse.position === "object"
+        && previewResponse.position !== null
+        ? previewResponse.position as Record<string, unknown>
+        : undefined;
+      const whatifCurrent = Number(previewPosition?.current);
       return {
-        ...(response.data as Record<string, unknown>),
+        ...previewResponse,
         previewMarketData: {
           ...marketData,
           quantity: orderPayload.quantity,
@@ -403,9 +443,36 @@ export async function order(client: IBClientRequester, orderRequest: OrderReques
             ? "Indicative value based on the prior close/NAV; a mutual-fund market order executes at its next calculated NAV."
             : "Indicative value from the latest available snapshot; execution price is not guaranteed.",
         },
+        ...(portfolioPosition === undefined
+          ? {}
+          : {
+              portfolioPositionValidation: {
+                current: portfolioPosition,
+                requestedChange: orderRequest.action === "BUY"
+                  ? builtOrder.positionQuantity!
+                  : -builtOrder.positionQuantity!,
+                after: portfolioPosition + (
+                  orderRequest.action === "BUY"
+                    ? builtOrder.positionQuantity!
+                    : -builtOrder.positionQuantity!
+                ),
+                whatifCurrent,
+                whatifCurrentMatchesPortfolio: whatifCurrent === portfolioPosition,
+              },
+            }),
       };
     }
-    return response.data;
+    return portfolioPosition === undefined
+      ? response.data
+      : {
+          orderResponse: response.data,
+          portfolioPositionValidation: {
+            current: portfolioPosition,
+            requestedChange: orderRequest.action === "BUY"
+              ? builtOrder.positionQuantity!
+              : -builtOrder.positionQuantity!,
+          },
+        };
   } catch (error: unknown) {
     Logger.error(`Failed to ${orderRequest.mode.toLowerCase()} order:`, error);
     if (isAuthenticationError(error)) {

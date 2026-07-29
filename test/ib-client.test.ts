@@ -425,13 +425,13 @@ describe('IBClient', () => {
       });
 
       it('should fetch exact contract details for a batch of conids', async () => {
-        const details = { secdef: [{ conid: 4815747, ticker: 'FXAIX', assetClass: 'FND' }] };
+        const details = { secdef: [{ conid: 141432825, ticker: 'FXAIX', assetClass: 'FUND' }] };
         mockFetch.mockResolvedValueOnce(mockResponse(details));
 
-        const result = await client.getContractDetails([4815747, 265598]);
+        const result = await client.getContractDetails([141432825, 265598]);
 
         expect(mockFetch).toHaveBeenCalledWith(
-          expect.stringContaining('/trsrv/secdef?conids=4815747%2C265598'),
+          expect.stringContaining('/trsrv/secdef?conids=141432825%2C265598'),
           expect.objectContaining({ method: 'GET' }),
         );
         expect(result).toEqual(details);
@@ -441,13 +441,13 @@ describe('IBClient', () => {
         const rules = { canTradeAcctIds: ['U12345'], orderTypes: ['MKT'] };
         mockFetch.mockResolvedValueOnce(mockResponse(rules));
 
-        const result = await client.getContractRules(4815747, 'SELL', 'FUNDSERV');
+        const result = await client.getContractRules(141432825, 'SELL', 'FUNDSERV');
 
         expect(mockFetch).toHaveBeenCalledWith(
           expect.stringContaining('/iserver/contract/rules'),
           expect.objectContaining({
             method: 'POST',
-            body: JSON.stringify({ conid: 4815747, isBuy: false, exchange: 'FUNDSERV' }),
+            body: JSON.stringify({ conid: 141432825, isBuy: false, exchange: 'FUNDSERV' }),
           }),
         );
         expect(mockFetch).not.toHaveBeenCalledWith(
@@ -665,6 +665,7 @@ describe('IBClient', () => {
         const body = findCallBody('/iserver/account/U12345/orders');
         expect(body).toEqual({
           orders: [{
+            acctId: 'U12345',
             conid: 141432825,
             orderType: 'MKT',
             side: 'SELL',
@@ -791,6 +792,7 @@ describe('IBClient', () => {
 
         const body = findCallBody('/iserver/account/U12345/orders');
         expect(body.orders[0]).toEqual({
+          acctId: 'U12345',
           conidex: '479624278@PAXOS',
           orderType: 'MKT',
           side: 'BUY',
@@ -817,6 +819,7 @@ describe('IBClient', () => {
 
         const body = findCallBody('/iserver/account/U12345/orders');
         expect(body.orders[0]).toEqual({
+          acctId: 'U12345',
           conidex,
           orderType: 'LMT',
           side: 'BUY',
@@ -949,6 +952,56 @@ describe('IBClient', () => {
           orderType: 'MKT',
           quantity: 1,
         } as any)).rejects.toThrow('Symbol is required when conid is not provided');
+      });
+
+      it('passes acctId and taxOptimizerId unchanged to both whatif and live order APIs', async () => {
+        const whatif = { amount: { commission: '1.00' }, position: { current: '10' }, error: null };
+        mockFetch
+          .mockResolvedValueOnce(mockResponse([]))
+          .mockResolvedValueOnce(mockResponse([{ conid: 265598, '31': '150.00', '6509': 'RPB' }]))
+          .mockResolvedValueOnce(mockResponse(whatif))
+          .mockResolvedValueOnce(mockResponse([{ order_id: 'order-123' }]));
+
+        const shared = {
+          accountId: 'U12345',
+          conid: 265598,
+          secType: 'STK' as const,
+          action: 'SELL' as const,
+          orderType: 'MKT' as const,
+          quantity: 2,
+          taxOptimizerId: 'tax-lot-selection-123',
+        };
+        await client.order({ mode: 'PREVIEW', ...shared });
+        await client.order({ mode: 'SUBMIT', ...shared });
+
+        const previewBody = findCallBody('/iserver/account/U12345/orders/whatif');
+        const submitCall = mockFetch.mock.calls.find(([url]: [string]) =>
+          url.endsWith('/iserver/account/U12345/orders')
+        );
+        const submitBody = JSON.parse(submitCall?.[1]?.body);
+        expect(previewBody).toEqual(submitBody);
+        expect(previewBody.orders[0]).toMatchObject({
+          acctId: 'U12345',
+          taxOptimizerId: 'tax-lot-selection-123',
+        });
+      });
+
+      it('rejects a validated sale larger than the portfolio position before calling whatif', async () => {
+        mockFetch
+          .mockResolvedValueOnce(mockResponse([{ conid: 265598, position: 3 }]));
+
+        await expect(client.order({
+          mode: 'PREVIEW',
+          accountId: 'U12345',
+          conid: 265598,
+          secType: 'STK',
+          action: 'SELL',
+          orderType: 'MKT',
+          quantity: 4,
+          validatePosition: true,
+        })).rejects.toThrow('requested SELL 4, portfolio position 3');
+
+        expect(findCall('/orders/whatif')).toBeUndefined();
       });
 
       it('should use byte-equivalent order bodies for PREVIEW and SUBMIT full-position fund orders', async () => {
@@ -1127,6 +1180,34 @@ describe('IBClient', () => {
           expect.objectContaining({ method: 'GET' })
         );
         expect(result).toEqual(mockOrders);
+      });
+    });
+
+    describe('getTransactionHistoryForAccounts', () => {
+      it('requests one contract across only the explicitly related accounts', async () => {
+        const history = { transactions: [{ acctid: 'U12345', conid: 265598, type: 'Buy' }] };
+        mockFetch.mockResolvedValueOnce(mockResponse(history));
+
+        const result = await client.getTransactionHistoryForAccounts(
+          ['U12345', 'U67890'],
+          265598,
+          'USD',
+          3650,
+        );
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          expect.stringContaining('/pa/transactions'),
+          expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({
+              acctIds: ['U12345', 'U67890'],
+              conids: [265598],
+              currency: 'USD',
+              days: 3650,
+            }),
+          }),
+        );
+        expect(result).toEqual(history);
       });
     });
 

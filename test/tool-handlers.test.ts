@@ -33,6 +33,7 @@ describe('ToolHandlers', () => {
       checkAuthenticationStatus: vi.fn().mockResolvedValue(true),
       reauthenticate: vi.fn().mockResolvedValue(undefined),
       getAccountInfo: vi.fn().mockResolvedValue({ accounts: [] }),
+      getPortfolioAccounts: vi.fn().mockResolvedValue([]),
       getPositions: vi.fn().mockResolvedValue([]),
       getAccountLedger: vi.fn().mockResolvedValue({ USD: { settledcash: 0 } }),
       getMarketData: vi.fn().mockResolvedValue({ price: 150 }),
@@ -43,6 +44,8 @@ describe('ToolHandlers', () => {
       getOrderStatus: vi.fn().mockResolvedValue({ status: 'Filled' }),
       cancelOrder: vi.fn().mockResolvedValue({ order_id: '123', msg: 'Request was submitted' }),
       getTrades: vi.fn().mockResolvedValue([]),
+      getTransactionHistory: vi.fn().mockResolvedValue({ transactions: [] }),
+      getTransactionHistoryForAccounts: vi.fn().mockResolvedValue({ transactions: [] }),
       getOrders: vi.fn().mockResolvedValue([]),
       confirmOrder: vi.fn().mockResolvedValue({ confirmed: true }),
       destroy: vi.fn(),
@@ -146,15 +149,15 @@ describe('ToolHandlers', () => {
 
   describe('contract metadata', () => {
     it('should fetch details for exact conids', async () => {
-      await handlers.getContractDetails({ conids: [4815747, 265598] });
+      await handlers.getContractDetails({ conids: [141432825, 265598] });
 
-      expect(mockIBClient.getContractDetails).toHaveBeenCalledWith([4815747, 265598]);
+      expect(mockIBClient.getContractDetails).toHaveBeenCalledWith([141432825, 265598]);
     });
 
     it('should fetch sell rules for the requested contract and exchange', async () => {
-      await handlers.getContractRules({ conid: 4815747, side: 'SELL', exchange: 'FUNDSERV' });
+      await handlers.getContractRules({ conid: 141432825, side: 'SELL', exchange: 'FUNDSERV' });
 
-      expect(mockIBClient.getContractRules).toHaveBeenCalledWith(4815747, 'SELL', 'FUNDSERV');
+      expect(mockIBClient.getContractRules).toHaveBeenCalledWith(141432825, 'SELL', 'FUNDSERV');
     });
   });
 
@@ -344,6 +347,106 @@ describe('ToolHandlers', () => {
 
       expect(result.content).toBeDefined();
       expect(mockIBClient.confirmOrder).toHaveBeenCalledWith('reply-123', ['msg1', 'msg2']);
+    });
+  });
+
+  describe('tax analysis tools', () => {
+    it('returns the versioned IRS rules without pretending broker entity proves tax residence', async () => {
+      mockIBClient.getPortfolioAccounts = vi.fn().mockResolvedValue([{
+        id: 'U12345',
+        ibEntity: 'IBLLC-US',
+        accountType: 'Individual',
+      }]);
+
+      const result = await handlers.getTaxRules({
+        accountId: 'U12345',
+        jurisdiction: 'AUTO',
+      });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.ruleSet.id).toBe('US-IRS-PUB550-2025');
+      expect(response.applicability).toBe('NEEDS_TAX_RESIDENCY_CONFIRMATION');
+      expect(response.caveat).toContain('broker entity');
+    });
+
+    it('warns when a proposed buy would replace a recent loss sale', async () => {
+      mockIBClient.getPortfolioAccounts = vi.fn().mockResolvedValue([{
+        id: 'U12345',
+        country: 'US',
+        accountType: 'Individual',
+      }]);
+      mockIBClient.getTransactionHistoryForAccounts = vi.fn().mockResolvedValue({
+        transactions: [
+          {
+            date: '20250101',
+            pr: 20,
+            qty: 10,
+            acctid: 'U12345',
+            conid: 265598,
+            type: 'Buy',
+          },
+          {
+            date: '20250701',
+            pr: 10,
+            qty: -10,
+            acctid: 'U12345',
+            conid: 265598,
+            type: 'Sell',
+          },
+        ],
+      });
+
+      const result = await handlers.analyzeTaxTrade({
+        accountId: 'U12345',
+        action: 'BUY',
+        conid: 265598,
+        quantity: 10,
+        tradeDate: '2025-07-10',
+        jurisdiction: 'AUTO',
+        relatedConids: [],
+        relatedAccountIds: [],
+        lotMethod: 'FIFO',
+        currency: 'USD',
+        days: 3650,
+        includeRaw: false,
+      });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.analysis.warning).toContain('10 loss-sale shares');
+      expect(response.analysis.washSale.totalDisallowedLoss).toBe(100);
+      expect(response.applicability).toBe('ACCOUNT_METADATA_CONFIRMS_US');
+    });
+
+    it('does not silently combine unrelated advisor accounts', async () => {
+      mockIBClient.getPortfolioAccounts = vi.fn().mockResolvedValue([
+        { id: 'U12345', country: 'US', accountType: 'Individual' },
+        { id: 'U99999', country: 'US', accountType: 'Individual' },
+      ]);
+      mockIBClient.getTransactionHistoryForAccounts = vi.fn().mockResolvedValue({
+        transactions: [],
+      });
+
+      await handlers.analyzeTaxTrade({
+        accountId: 'U12345',
+        action: 'BUY',
+        conid: 265598,
+        quantity: 10,
+        tradeDate: '2025-07-10',
+        jurisdiction: 'US',
+        relatedConids: [],
+        relatedAccountIds: [],
+        lotMethod: 'FIFO',
+        currency: 'USD',
+        days: 3650,
+        includeRaw: false,
+      });
+
+      expect(mockIBClient.getTransactionHistoryForAccounts).toHaveBeenCalledWith(
+        ['U12345'],
+        265598,
+        'USD',
+        3650,
+      );
     });
   });
 

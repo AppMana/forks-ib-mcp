@@ -230,12 +230,22 @@ To reset the managed Gateway session, stop the Gateway process recorded in `ib-g
 | `get_live_orders`  | Get all live/open orders for monitoring   |
 | `get_trades`       | Get definitive executions for a selected subaccount for up to seven days |
 | `get_account_ledger` | Get cash and settled-cash balances by currency for one account |
+| `get_transaction_history` | Get raw PortfolioAnalyst transactions for one account and contract |
+| `get_tax_rules` | Return the versioned IRS rule entry and account-jurisdiction evidence |
+| `analyze_tax_trade` | Reconstruct transaction lots and estimate holding-period and wash-sale effects for a proposed buy or sell without placing an order |
 
 `PREVIEW` warms the IBKR market-data snapshot before calling `/whatif`. The raw
 IBKR response is preserved, and object responses include `previewMarketData`
 with the exact normalized quantity, snapshot price type, and indicative
 notional. A `C`-prefixed mutual-fund price is explicitly labeled as the previous
 close/NAV because the next execution NAV is not known in advance.
+
+`analyze_tax_trade` is independent of `/whatif`. It uses trade-date transaction
+history and, for sales, reconciles reconstructed quantity with the live
+portfolio. It does not silently combine advisor subaccounts: cross-account
+wash-sale analysis requires explicit `relatedAccountIds`, and cross-contract
+analysis requires explicit `relatedConids`. See
+[Tax analysis design](docs/tax-analysis.md) for rule mappings and limitations.
 
 ### Flex Queries (Requires IB_FLEX_TOKEN)
 

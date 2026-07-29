@@ -27,7 +27,7 @@ function getAccountId(account: AccountEntry): string | undefined {
   return account.id?.trim() || account.accountId?.trim() || undefined;
 }
 
-async function getPortfolioAccounts(
+export async function getPortfolioAccounts(
   client: IBClientRequester,
 ): Promise<AccountEntry[]> {
   const accountsResponse = await client.request<AccountEntry[]>("GET", "/portfolio/accounts");
@@ -152,6 +152,39 @@ export async function getAccountLedger(
     }
     throw new Error(
       `Failed to retrieve ledger for account ${accountId}: ${getErrorMessage(error)}`,
+      { cause: error },
+    );
+  }
+}
+
+export async function getTransactionHistory(
+  client: IBClientRequester,
+  accountIds: string[],
+  conid: number,
+  currency = "USD",
+  days = 365,
+): Promise<unknown> {
+  if (accountIds.length === 0) throw new Error("At least one account ID is required");
+  try {
+    const response = await client.request("POST", "/pa/transactions", {
+      body: {
+        acctIds: accountIds,
+        conids: [conid],
+        currency,
+        days,
+      },
+    });
+    return response.data;
+  } catch (error: unknown) {
+    const accountLabel = accountIds.join(", ");
+    Logger.error(`Failed to get transaction history for accounts ${accountLabel}, conid ${conid}:`, error);
+    if (isAuthenticationError(error)) {
+      throw new AuthenticationError(
+        `Authentication required to retrieve transaction history for accounts ${accountLabel}. Please authenticate with Interactive Brokers first.`,
+      );
+    }
+    throw new Error(
+      `Failed to retrieve transaction history for accounts ${accountLabel}, conid ${conid}: ${getErrorMessage(error)}`,
       { cause: error },
     );
   }
