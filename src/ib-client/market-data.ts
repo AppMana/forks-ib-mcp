@@ -36,16 +36,81 @@ export function pickContract<T extends ContractSearch | OptionContractInfo>(
   return match ?? contracts[0];
 }
 
-export async function searchContracts(client: IBClientRequester, symbol: string): Promise<ContractSearch[]> {
+export interface ContractSearchRequest {
+  symbol: string;
+  name?: boolean;
+  secType?: string;
+}
+
+export interface SecdefInfoRequest {
+  conid?: number;
+  issuerId?: string;
+  secType: string;
+  month?: string;
+  exchange?: string;
+  strike?: number;
+  right?: "C" | "P";
+}
+
+export async function searchContractDefinitions(
+  client: IBClientRequester,
+  request: ContractSearchRequest,
+): Promise<ContractSearch[]> {
+  const params = new URLSearchParams({ symbol: request.symbol });
+  if (request.name !== undefined) params.set("name", String(request.name));
+  if (request.secType) params.set("secType", request.secType);
   const response = await client.request<ContractSearch[]>(
     "GET",
-    `/iserver/secdef/search?symbol=${encodeURIComponent(symbol)}`,
+    `/iserver/secdef/search?${params.toString()}`,
   );
+  return response.data;
+}
 
-  if (!response.data || response.data.length === 0) {
+export async function searchContracts(client: IBClientRequester, symbol: string): Promise<ContractSearch[]> {
+  const contracts = await searchContractDefinitions(client, { symbol });
+
+  if (contracts.length === 0) {
     throw new SymbolNotFoundError(`Symbol ${symbol} not found`);
   }
 
+  return contracts;
+}
+
+export async function getBondFilters(
+  client: IBClientRequester,
+  issuerId: string,
+): Promise<unknown> {
+  const params = new URLSearchParams({
+    symbol: "BOND",
+    issuerId,
+  });
+  const response = await client.request<unknown>(
+    "GET",
+    `/iserver/secdef/bond-filters?${params.toString()}`,
+  );
+  return response.data;
+}
+
+export async function getSecdefInfo(
+  client: IBClientRequester,
+  request: SecdefInfoRequest,
+): Promise<unknown> {
+  if (request.conid === undefined && !request.issuerId) {
+    throw new Error("get_secdef_info requires conid or issuerId");
+  }
+
+  const params = new URLSearchParams();
+  if (request.conid !== undefined) params.set("conid", String(request.conid));
+  if (request.issuerId) params.set("issuerId", request.issuerId);
+  params.set("secType", request.secType);
+  if (request.month) params.set("month", request.month);
+  if (request.exchange) params.set("exchange", request.exchange);
+  if (request.strike !== undefined) params.set("strike", String(request.strike));
+  if (request.right) params.set("right", request.right);
+  const response = await client.request<unknown>(
+    "GET",
+    `/iserver/secdef/info?${params.toString()}`,
+  );
   return response.data;
 }
 

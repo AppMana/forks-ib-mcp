@@ -18,7 +18,16 @@ import {
   getPositions,
   getTransactionHistory,
 } from "./ib-client/accounts.js";
-import { getContractDetails, getContractRules, getMarketData } from "./ib-client/market-data.js";
+import {
+  getBondFilters,
+  getContractDetails,
+  getContractRules,
+  getMarketData,
+  getSecdefInfo,
+  searchContractDefinitions,
+  type ContractSearchRequest,
+  type SecdefInfoRequest,
+} from "./ib-client/market-data.js";
 import { getOptionChain, resolveOptionConid } from "./ib-client/options.js";
 import { cancelOrder, order, placeOrder, confirmOrder, getOrderStatus, getOrders, getTrades } from "./ib-client/orders.js";
 import { getAlerts, createAlert, activateAlert, deleteAlert } from "./ib-client/alerts.js";
@@ -545,6 +554,18 @@ export class IBClient {
 
   async getMarketData(symbol: string, exchange?: string): Promise<{ symbol: string; contract: ContractSearch; marketData: unknown }> {
     return getMarketData(this, symbol, exchange);
+  }
+
+  async searchContracts(request: ContractSearchRequest): Promise<ContractSearch[]> {
+    return searchContractDefinitions(this, request);
+  }
+
+  async getBondFilters(issuerId: string): Promise<unknown> {
+    return getBondFilters(this, issuerId);
+  }
+
+  async getSecdefInfo(request: SecdefInfoRequest): Promise<unknown> {
+    return getSecdefInfo(this, request);
   }
 
   async getContractDetails(conids: number[]): Promise<unknown> {

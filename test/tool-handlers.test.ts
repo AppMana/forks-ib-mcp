@@ -37,6 +37,9 @@ describe('ToolHandlers', () => {
       getPositions: vi.fn().mockResolvedValue([]),
       getAccountLedger: vi.fn().mockResolvedValue({ USD: { settledcash: 0 } }),
       getMarketData: vi.fn().mockResolvedValue({ price: 150 }),
+      searchContracts: vi.fn().mockResolvedValue([]),
+      getBondFilters: vi.fn().mockResolvedValue([]),
+      getSecdefInfo: vi.fn().mockResolvedValue([]),
       getContractDetails: vi.fn().mockResolvedValue({ secdef: [] }),
       getContractRules: vi.fn().mockResolvedValue({ canTradeAcctIds: [] }),
       order: vi.fn().mockResolvedValue({ orderId: '123' }),
@@ -144,6 +147,58 @@ describe('ToolHandlers', () => {
       await handlers.getMarketData({ symbol: 'AAPL', exchange: 'NASDAQ' });
 
       expect(mockIBClient.getMarketData).toHaveBeenCalledWith('AAPL', 'NASDAQ');
+    });
+  });
+
+  describe('contract discovery', () => {
+    it('forwards generic searches without narrowing the IBKR response', async () => {
+      const contracts = [{ conid: 123456, symbol: 'SOY', sections: [{ secType: 'FUT' }] }];
+      mockIBClient.searchContracts = vi.fn().mockResolvedValue(contracts);
+
+      const result = await handlers.searchContracts({ symbol: 'SOY', name: false });
+
+      expect(mockIBClient.searchContracts).toHaveBeenCalledWith({ symbol: 'SOY', name: false });
+      expect(JSON.parse(result.content[0].text)).toEqual(contracts);
+    });
+
+    it('forwards derivative resolution parameters unchanged', async () => {
+      const contracts = [{ conid: 654321, secType: 'FUT' }];
+      mockIBClient.getSecdefInfo = vi.fn().mockResolvedValue(contracts);
+      const input = {
+        conid: 123456,
+        secType: 'FUT',
+        month: 'NOV26',
+        exchange: 'CBOT',
+      };
+
+      const result = await handlers.getSecdefInfo(input);
+
+      expect(mockIBClient.getSecdefInfo).toHaveBeenCalledWith(input);
+      expect(JSON.parse(result.content[0].text)).toEqual(contracts);
+    });
+
+    it('forwards the bond issuer workflow without interpreting IBKR filter values', async () => {
+      const availableFilters = {
+        bondFilters: [{
+          displayText: 'Currency',
+          columnId: 5,
+          options: [{ text: 'US Dollar', value: 'USD' }],
+        }],
+      };
+      mockIBClient.getBondFilters = vi.fn().mockResolvedValue(availableFilters);
+      mockIBClient.getSecdefInfo = vi.fn().mockResolvedValue([{ conid: 987654 }]);
+      const input = {
+        issuerId: 'e1359061',
+        secType: 'BOND',
+      };
+
+      const filtersResult = await handlers.getBondFilters({ issuerId: 'e1359061' });
+      const infoResult = await handlers.getSecdefInfo(input);
+
+      expect(mockIBClient.getBondFilters).toHaveBeenCalledWith('e1359061');
+      expect(JSON.parse(filtersResult.content[0].text)).toEqual(availableFilters);
+      expect(mockIBClient.getSecdefInfo).toHaveBeenCalledWith(input);
+      expect(JSON.parse(infoResult.content[0].text)).toEqual([{ conid: 987654 }]);
     });
   });
 
