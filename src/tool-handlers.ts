@@ -12,6 +12,9 @@ import {
   GetOptionChainInput,
   ResolveOptionConidInput,
   GetMarketDataInput,
+  SearchContractsInput,
+  GetBondFiltersInput,
+  GetSecdefInfoInput,
   PlaceOrderInput,
   GetOrderStatusInput,
   GetLiveOrdersInput,
@@ -637,6 +640,35 @@ export class ToolHandlers {
     }
   }
 
+  async searchContracts(input: SearchContractsInput): Promise<ToolHandlerResult> {
+    const auth = await this.ensureAuth();
+    if (!auth.ok) return auth.result;
+    try {
+      return this.jsonResult(await this.context.ibClient.searchContracts(input));
+    } catch (error) {
+      return this.textResult(this.formatError(error));
+    }
+  }
+
+  async getBondFilters(input: GetBondFiltersInput): Promise<ToolHandlerResult> {
+    const auth = await this.ensureAuth();
+    if (!auth.ok) return auth.result;
+    try {
+      return this.jsonResult(await this.context.ibClient.getBondFilters(input.issuerId));
+    } catch (error) {
+      return this.textResult(this.formatError(error));
+    }
+  }
+
+  async getSecdefInfo(input: GetSecdefInfoInput): Promise<ToolHandlerResult> {
+    const auth = await this.ensureAuth();
+    if (!auth.ok) return auth.result;
+    try {
+      return this.jsonResult(await this.context.ibClient.getSecdefInfo(input));
+    } catch (error) {
+      return this.textResult(this.formatError(error));
+    }
+  }
   async getOptionChain(input: GetOptionChainInput): Promise<ToolHandlerResult> {
     const auth = await this.ensureAuth();
     if (!auth.ok) {

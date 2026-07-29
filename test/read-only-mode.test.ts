@@ -13,12 +13,15 @@ describe('Read-Only Mode Tool Registration', () => {
     let mockIBClient: IBClient;
     let mockGatewayManager: IBGatewayManager;
     let registeredTools: string[] = [];
+    let registeredDescriptions: Map<string, string>;
 
     beforeEach(() => {
         registeredTools = [];
+        registeredDescriptions = new Map();
         mockMcpServer = {
-            tool: vi.fn().mockImplementation((name, ...args) => {
+            tool: vi.fn().mockImplementation((name, description, ...args) => {
                 registeredTools.push(name);
+                registeredDescriptions.set(name, description);
                 return mockMcpServer;
             }),
         } as unknown as McpServer;
@@ -41,6 +44,18 @@ describe('Read-Only Mode Tool Registration', () => {
         // Verify read tools are also registered
         expect(registeredTools).toContain('get_positions');
         expect(registeredTools).toContain('get_market_data');
+        expect(registeredTools).toContain('search_contracts');
+        expect(registeredTools).toContain('get_bond_filters');
+        expect(registeredTools).toContain('get_secdef_info');
+    });
+
+    it('documents the observed search ambiguities and bond issuer workflow', () => {
+        registerTools(mockMcpServer, mockIBClient, mockGatewayManager, {});
+
+        expect(registeredDescriptions.get('search_contracts')).toContain('tickers can collide');
+        expect(registeredDescriptions.get('search_contracts')).toContain('literal BOND can return ETFs');
+        expect(registeredDescriptions.get('search_contracts')).toContain('issuer ID');
+        expect(registeredDescriptions.get('get_secdef_info')).toContain('sentinel');
     });
 
     it('should register ALL tools when read-only mode is EXPLICITLY FALSE', () => {
@@ -68,6 +83,9 @@ describe('Read-Only Mode Tool Registration', () => {
         // Verify read tools ARE registered
         expect(registeredTools).toContain('get_positions');
         expect(registeredTools).toContain('get_market_data');
+        expect(registeredTools).toContain('search_contracts');
+        expect(registeredTools).toContain('get_bond_filters');
+        expect(registeredTools).toContain('get_secdef_info');
         expect(registeredTools).toContain('get_account_info');
         expect(registeredTools).toContain('get_live_orders');
         expect(registeredTools).toContain('get_order_status');

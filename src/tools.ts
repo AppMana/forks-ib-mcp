@@ -14,6 +14,9 @@ import {
   GetFlexQueryZodShape,
   GetLiveOrdersZodShape,
   GetMarketDataZodShape,
+  SearchContractsZodShape,
+  GetBondFiltersZodShape,
+  GetSecdefInfoZodShape,
   GetOptionChainZodShape,
   GetOrderStatusZodShape,
   GetPositionsZodShape,
@@ -87,6 +90,26 @@ export function registerTools(
     async (args) => await handlers.getMarketData(args),
   );
 
+  registerTool(
+    "search_contracts",
+    "Search IBKR security definitions. Results are broad: tickers can collide, literal BOND can return ETFs, and XAUUSD can return CFD/CMDTY variants, so inspect sections and exchanges. For bonds search a family such as US-T with secType BOND; use the returned issuer ID, not its sentinel conid, with get_bond_filters and get_secdef_info.",
+    SearchContractsZodShape,
+    async (args) => await handlers.searchContracts(args),
+  );
+
+  registerTool(
+    "get_bond_filters",
+    "Get IBKR's filter metadata for a bond issuer ID returned by search_contracts, including available exchanges, maturities, issue dates, coupons, and currencies. These describe the issuer's contracts; resolve their conids with get_secdef_info. Usage: `{ \"issuerId\":\"e1359061\" }`.",
+    GetBondFiltersZodShape,
+    async (args) => await handlers.getBondFilters(args),
+  );
+
+  registerTool(
+    "get_secdef_info",
+    "Resolve concrete contracts from search results. For derivatives pass conid, secType, and applicable month/exchange/strike/right. For bonds pass the search result's issuerId with secType BOND; the search conid may be a sentinel. Usage: `{ \"issuerId\":\"e1359061\",\"secType\":\"BOND\" }`.",
+    GetSecdefInfoZodShape,
+    async (args) => await handlers.getSecdefInfo(args),
+  );
   if (!userConfig?.IB_READ_ONLY_MODE) {
     registerTool(
       "place_order",

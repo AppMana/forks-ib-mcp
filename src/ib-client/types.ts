@@ -69,6 +69,11 @@ export interface ContractSearch {
   companyHeader?: string;
   restricted?: string | boolean;
   sections?: ContractSection[];
+  issuers?: Array<{
+    id: string;
+    name: string;
+    bondid?: number;
+  }>;
 }
 
 export interface OptionStrikesResponse {

@@ -8,6 +8,10 @@ const IntegerOrStringIntegerZod = z.union([
 
 const SecurityTypeZod = z.enum(IBKR_ORDER_SECURITY_TYPES);
 const OptionRightZod = z.enum(["C", "P"]);
+const ConidZod = z.union([
+  z.number().int().positive(),
+  z.string().regex(/^[0-9]+$/).transform((val) => Number(val)),
+]);
 
 export const AuthenticateZodShape = {
   confirm: z.literal(true)
@@ -39,6 +43,25 @@ export const GetMarketDataZodShape = {
   exchange: z.string().optional()
 };
 
+export const SearchContractsZodShape = {
+  symbol: z.string().trim().min(1),
+  name: z.boolean().optional(),
+  secType: z.string().trim().min(1).optional(),
+};
+
+export const GetBondFiltersZodShape = {
+  issuerId: z.string().trim().min(1),
+};
+
+export const GetSecdefInfoZodShape = {
+  conid: ConidZod.optional(),
+  issuerId: z.string().trim().min(1).optional(),
+  secType: z.string().trim().min(1),
+  month: z.string().trim().min(1).optional(),
+  exchange: z.string().trim().min(1).optional(),
+  strike: z.number().positive().optional(),
+  right: OptionRightZod.optional(),
+};
 export const PlaceOrderZodShape = {
   mode: z.enum(["PREVIEW", "SUBMIT"]),
   accountId: z.string(),
@@ -139,6 +162,14 @@ export const GetPositionsZodSchema = z.object(GetPositionsZodShape);
 export const GetOptionChainZodSchema = z.object(GetOptionChainZodShape);
 export const ResolveOptionConidZodSchema = z.object(ResolveOptionConidZodShape);
 export const GetMarketDataZodSchema = z.object(GetMarketDataZodShape);
+export const SearchContractsZodSchema = z.object(SearchContractsZodShape);
+export const GetBondFiltersZodSchema = z.object(GetBondFiltersZodShape);
+export const GetSecdefInfoZodSchema = z
+  .object(GetSecdefInfoZodShape)
+  .refine(
+    (data) => data.conid !== undefined || data.issuerId !== undefined,
+    { message: "conid or issuerId is required" },
+  );
 
 export const PlaceOrderZodSchema = z
   .object(PlaceOrderZodShape)
@@ -282,6 +313,9 @@ export type GetPositionsInput = z.infer<typeof GetPositionsZodSchema>;
 export type GetOptionChainInput = z.infer<typeof GetOptionChainZodSchema>;
 export type ResolveOptionConidInput = z.infer<typeof ResolveOptionConidZodSchema>;
 export type GetMarketDataInput = z.infer<typeof GetMarketDataZodSchema>;
+export type SearchContractsInput = z.infer<typeof SearchContractsZodSchema>;
+export type GetBondFiltersInput = z.infer<typeof GetBondFiltersZodSchema>;
+export type GetSecdefInfoInput = z.infer<typeof GetSecdefInfoZodSchema>;
 export type PlaceOrderInput = z.infer<typeof PlaceOrderZodSchema>;
 export type GetOrderStatusInput = z.infer<typeof GetOrderStatusZodSchema>;
 export type GetLiveOrdersInput = z.infer<typeof GetLiveOrdersZodSchema>;

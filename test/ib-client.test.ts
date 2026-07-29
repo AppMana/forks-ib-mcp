@@ -398,6 +398,157 @@ describe('IBClient', () => {
           'Symbol INVALID on NASDAQ not found'
         );
       });
+      it('should expose raw contract search metadata and optional filters', async () => {
+        const contracts = [{
+          conid: 123456,
+          symbol: 'SOY',
+          sections: [{ secType: 'FUT', months: 'NOV26;JAN27', exchange: 'CBOT' }],
+        }];
+        mockFetch.mockResolvedValueOnce(mockResponse(contracts));
+
+        const result = await client.searchContracts({
+          symbol: 'Soy Beans',
+          name: true,
+          secType: 'IND',
+        });
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          expect.stringContaining(
+            '/iserver/secdef/search?symbol=Soy+Beans&name=true&secType=IND',
+          ),
+          expect.objectContaining({ method: 'GET' }),
+        );
+        expect(result).toEqual(contracts);
+      });
+
+      it('should search by symbol without inventing optional filters', async () => {
+        mockFetch.mockResolvedValueOnce(mockResponse([]));
+
+        const result = await client.searchContracts({ symbol: 'SOY' });
+
+        const call = findCall('/iserver/secdef/search?symbol=SOY');
+        expect(call?.[0]).not.toContain('name=');
+        expect(call?.[0]).not.toContain('secType=');
+        expect(result).toEqual([]);
+      });
+
+      it('should preserve BOND issuer results from the documented search filter', async () => {
+        const bonds = [{
+          conid: 123456,
+          symbol: 'BOND',
+          sections: [{ secType: 'BOND' }],
+          issuers: [{ id: 'issuer-123', name: 'Test Bond Issuer', bondid: 1 }],
+        }];
+        mockFetch.mockResolvedValueOnce(mockResponse(bonds));
+
+        const result = await client.searchContracts({
+          symbol: 'BOND',
+          secType: 'BOND',
+        });
+
+        expect(findCall('/iserver/secdef/search?symbol=BOND&secType=BOND')).toBeDefined();
+        expect(result).toEqual(bonds);
+        expect(result[0].issuers?.[0]).toEqual(
+          expect.objectContaining({ id: 'issuer-123', name: 'Test Bond Issuer' }),
+        );
+      });
+
+      it('should preserve CMDTY discovery and resolve it without remapping the type', async () => {
+        const searchResult = [{
+          conid: 123456,
+          symbol: 'XAUUSD',
+          restricted: 'CMDTY',
+          sections: [{ secType: 'CMDTY', exchange: 'SMART' }],
+        }];
+        const resolved = [{ conid: 654321, symbol: 'XAUUSD', secType: 'CMDTY' }];
+        mockFetch
+          .mockResolvedValueOnce(mockResponse(searchResult))
+          .mockResolvedValueOnce(mockResponse(resolved));
+
+        expect(await client.searchContracts({ symbol: 'XAUUSD' })).toEqual(searchResult);
+        expect(await client.getSecdefInfo({
+          conid: 123456,
+          secType: 'CMDTY',
+          exchange: 'SMART',
+        })).toEqual(resolved);
+
+        expect(findCall('/iserver/secdef/search?symbol=XAUUSD')).toBeDefined();
+        expect(findCall(
+          '/iserver/secdef/info?conid=123456&secType=CMDTY&exchange=SMART',
+        )).toBeDefined();
+      });
+
+      it('should resolve concrete derivative contracts through secdef info', async () => {
+        const contracts = [{ conid: 654321, symbol: 'ZS', secType: 'FUT' }];
+        mockFetch.mockResolvedValueOnce(mockResponse(contracts));
+
+        const result = await client.getSecdefInfo({
+          conid: 123456,
+          secType: 'FUT',
+          month: 'NOV26',
+          exchange: 'CBOT',
+        });
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          expect.stringContaining(
+            '/iserver/secdef/info?conid=123456&secType=FUT&month=NOV26&exchange=CBOT',
+          ),
+          expect.objectContaining({ method: 'GET' }),
+        );
+        expect(result).toEqual(contracts);
+      });
+
+      it('should fetch bond filters and resolve concrete contracts by issuer ID', async () => {
+        const filters = {
+          bondFilters: [{
+            displayText: 'Currency',
+            columnId: 5,
+            options: [{ text: 'US Dollar', value: 'USD' }],
+          }],
+        };
+        const contracts = [{ conid: 987654, secType: 'BOND' }];
+        mockFetch
+          .mockResolvedValueOnce(mockResponse(filters))
+          .mockResolvedValueOnce(mockResponse(contracts));
+
+        expect(await client.getBondFilters('e1359061')).toEqual(filters);
+        expect(await client.getSecdefInfo({
+          issuerId: 'e1359061',
+          secType: 'BOND',
+        })).toEqual(contracts);
+
+        expect(findCall(
+          '/iserver/secdef/bond-filters?symbol=BOND&issuerId=e1359061',
+        )).toBeDefined();
+        expect(findCall(
+          '/iserver/secdef/info?issuerId=e1359061&secType=BOND',
+        )).toBeDefined();
+      });
+
+      it('should reject secdef info without a conid or issuer ID before requesting it', async () => {
+        await expect(client.getSecdefInfo({
+          secType: 'BOND',
+        })).rejects.toThrow('requires conid or issuerId');
+
+        expect(findCall('/iserver/secdef/info')).toBeUndefined();
+      });
+
+      it('should pass strike and right without requiring month or exchange', async () => {
+        mockFetch.mockResolvedValueOnce(mockResponse([]));
+
+        await client.getSecdefInfo({
+          conid: 123456,
+          secType: 'FOP',
+          strike: 1250,
+          right: 'C',
+        });
+
+        const call = findCall(
+          '/iserver/secdef/info?conid=123456&secType=FOP&strike=1250&right=C',
+        );
+        expect(call?.[0]).not.toContain('month=');
+        expect(call?.[0]).not.toContain('exchange=');
+      });
     });
 
     describe('placeOrder', () => {

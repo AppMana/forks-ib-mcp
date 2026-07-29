@@ -4,6 +4,9 @@ import {
   PlaceOrderZodSchema,
   GetPositionsZodSchema,
   GetMarketDataZodSchema,
+  SearchContractsZodSchema,
+  GetBondFiltersZodSchema,
+  GetSecdefInfoZodSchema,
   GetLiveOrdersZodSchema,
   GetOrderStatusZodSchema,
   ConfirmOrderZodSchema,
@@ -27,6 +30,58 @@ describe('Tool Definitions - Zod Schemas', () => {
     expect(IBKR_ORDER_SECURITY_TYPES).not.toContain('EC');
   });
 
+  describe('Contract discovery schemas', () => {
+    it('accepts generic contract search and derivative resolution requests', () => {
+      const search = SearchContractsZodSchema.safeParse({
+        symbol: 'SOY',
+        name: false,
+      });
+      const info = GetSecdefInfoZodSchema.safeParse({
+        conid: '123456',
+        secType: 'FUT',
+        month: 'NOV26',
+        exchange: 'CBOT',
+      });
+
+      expect(search.success).toBe(true);
+      expect(info.success).toBe(true);
+      if (info.success) expect(info.data.conid).toBe(123456);
+    });
+
+    it('allows API security-type evolution but rejects incomplete searches', () => {
+      expect(SearchContractsZodSchema.safeParse({ symbol: '' }).success).toBe(false);
+      expect(GetSecdefInfoZodSchema.safeParse({
+        conid: 123456,
+        secType: 'FUT+NEW',
+      }).success).toBe(true);
+      expect(GetSecdefInfoZodSchema.safeParse({ conid: 123456 }).success).toBe(false);
+    });
+
+    it('accepts explicit BOND searches and CMDTY resolution', () => {
+      expect(SearchContractsZodSchema.safeParse({
+        symbol: 'BOND',
+        secType: 'BOND',
+      }).success).toBe(true);
+      expect(GetSecdefInfoZodSchema.safeParse({
+        conid: 123456,
+        secType: 'CMDTY',
+        exchange: 'SMART',
+      }).success).toBe(true);
+    });
+
+    it('accepts the issuer workflow and requires an identifier for secdef info', () => {
+      expect(GetBondFiltersZodSchema.safeParse({
+        issuerId: 'e1359061',
+      }).success).toBe(true);
+      expect(GetSecdefInfoZodSchema.safeParse({
+        issuerId: 'e1359061',
+        secType: 'BOND',
+      }).success).toBe(true);
+      expect(GetSecdefInfoZodSchema.safeParse({
+        secType: 'BOND',
+      }).success).toBe(false);
+    });
+  });
   describe('PlaceOrderZodSchema', () => {
     it('should accept valid market order', () => {
       const validOrder = {
