@@ -136,7 +136,7 @@ export function registerTools(
   if (!userConfig?.IB_READ_ONLY_MODE) {
     registerTool(
       "place_order",
-      "Preview or submit one order using the same normalized IBKR payload. Supports IBKR order security types STK, OPT, FUT, FOP, CASH, BAG, WAR, BOND, CMDTY, FUND, CFD, IOPT, and CRYPTO. Set mode to PREVIEW for /whatif (no order is submitted) or SUBMIT for a live order. Examples:\n" +
+      "Preview or submit one order using the same normalized IBKR payload. Supports IBKR order security types STK, OPT, FUT, FOP, CASH, BAG, WAR, BOND, CMDTY, FUND, CFD, IOPT, and CRYPTO. Set mode to PREVIEW for /whatif (no order is submitted) or SUBMIT for a live order. For FUND/FUNDSERV, IBKR encodes redemptions as SELL MKT orders, but they execute at the next applicable NAV rather than against an intraday order book. Examples:\n" +
         "- Preview: `{ \"mode\":\"PREVIEW\",\"accountId\":\"abc\",\"symbol\":\"AAPL\",\"action\":\"BUY\",\"orderType\":\"MKT\",\"quantity\":1 }`\n" +
         "- Submit: `{ \"mode\":\"SUBMIT\",\"accountId\":\"abc\",\"symbol\":\"AAPL\",\"action\":\"BUY\",\"orderType\":\"MKT\",\"quantity\":1 }`\n" +
         "- Preview full mutual-fund sale: `{ \"mode\":\"PREVIEW\",\"accountId\":\"abc\",\"conid\":123456789,\"secType\":\"FUND\",\"exchange\":\"FUNDSERV\",\"action\":\"SELL\",\"orderType\":\"MKT\",\"fullPosition\":true }`\n" +
